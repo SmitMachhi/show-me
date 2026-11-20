@@ -9,6 +9,7 @@ const agent = @import("agent.zig");
 const graphs = @import("graphs.zig");
 const lint = @import("lint.zig");
 const exporter = @import("export.zig");
+const list = @import("list.zig");
 const Io = std.Io;
 
 const usage =
@@ -30,6 +31,7 @@ const usage =
 pub fn main(init: std.process.Init) !void {
     const args = try init.minimal.args.toSlice(init.arena.allocator());
     const cmd = if (args.len > 1) args[1] else "";
+    if (args.len < 2) return list.run(init);
     if (std.mem.eql(u8, cmd, "serve")) return daemon.serve(init);
     if (std.mem.eql(u8, cmd, "open")) return open(init, args);
     if (std.mem.eql(u8, cmd, "wait")) return agent.wait(init, args);

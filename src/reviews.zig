@@ -148,6 +148,19 @@ pub fn waitBeat(sh: *Shared, arena: std.mem.Allocator, key: Key, seen_size: *u64
     return null;
 }
 
+// How many notes the agent has not confirmed yet.
+pub fn unread(log: []const u8) usize {
+    var notes: usize = 0;
+    var acked: usize = 0;
+    var lines = std.mem.splitScalar(u8, log, '\n');
+    while (lines.next()) |line| {
+        if (std.mem.startsWith(u8, line, note_prefix)) notes += 1;
+        if (!std.mem.startsWith(u8, line, ack_prefix)) continue;
+        acked = std.fmt.parseInt(usize, line[ack_prefix.len .. line.len - 1], 10) catch acked;
+    }
+    return notes -| acked;
+}
+
 fn pending(arena: std.mem.Allocator, log: []const u8) !?[]const u8 {
     var notes: std.ArrayList([]const u8) = .empty;
     var acked: usize = 0;
