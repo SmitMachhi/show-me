@@ -6,7 +6,7 @@ const builtin = @import("builtin");
 const Io = std.Io;
 const Env = std.process.Environ.Map;
 
-pub const version = "0.0.12";
+pub const version = "0.1.0";
 pub const default_port: u16 = 4388;
 
 pub const Info = struct { port: u16, version: []const u8 };
@@ -22,14 +22,16 @@ pub fn port(env: *const Env) u16 {
         fail("SHOW_ME_PORT must be a port number, got '{s}'", .{text});
 }
 
+// The person's home folder: USERPROFILE on Windows, HOME elsewhere.
+pub fn home(env: *const Env) []const u8 {
+    const key = if (builtin.os.tag == .windows) "USERPROFILE" else "HOME";
+    return env.get(key) orelse fail("{s} is not set, so show-me cannot find your home folder.", .{key});
+}
+
 // Opens the state folder, creating it on first use. SHOW_ME_STATE_DIR overrides ~/.show-me.
 pub fn dir(io: Io, arena: std.mem.Allocator, env: *const Env) Io.Dir {
-    const path = env.get("SHOW_ME_STATE_DIR") orelse blk: {
-        const home_key = if (builtin.os.tag == .windows) "USERPROFILE" else "HOME";
-        const home = env.get(home_key) orelse
-            fail("{s} is not set. Set SHOW_ME_STATE_DIR to a folder show-me can write to.", .{home_key});
-        break :blk std.fs.path.join(arena, &.{ home, ".show-me" }) catch fail("out of memory", .{});
-    };
+    const path = env.get("SHOW_ME_STATE_DIR") orelse
+        (std.fs.path.join(arena, &.{ home(env), ".show-me" }) catch fail("out of memory", .{}));
     return Io.Dir.cwd().createDirPathOpen(io, path, .{}) catch |e|
         fail("cannot create state folder '{s}': {t}", .{ path, e });
 }

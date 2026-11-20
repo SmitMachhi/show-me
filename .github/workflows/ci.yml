@@ -1,0 +1,90 @@
+# Builds and tests show-me on Windows, Linux and macOS. On one version tag (v1.2.3) it
+# also publishes those three tested binaries as one GitHub release.
+# Zig comes straight from ziglang.org at one pinned version. No third-party actions.
+name: ci
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  ZIG_VERSION: 0.17.1
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            zig: zig-x86_64-linux
+            archive: tar.xz
+            target: x86_64-linux-musl
+            out: show-me-linux-x86_64
+          - os: macos-latest
+            zig: zig-aarch64-macos
+            archive: tar.xz
+            target: aarch64-macos
+            out: show-me-macos-arm64
+          - os: windows-latest
+            zig: zig-x86_64-windows
+            archive: zip
+            target: x86_64-windows
+            out: show-me-windows-x86_64.exe
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        run: |
+          name="${{ matrix.zig }}-$ZIG_VERSION"
+          curl -fsSL -o zig.archive "https://ziglang.org/download/$ZIG_VERSION/$name.${{ matrix.archive }}"
+          if [ "${{ matrix.archive }}" = "zip" ]; then unzip -q zig.archive; else tar -xf zig.archive; fi
+          echo "$PWD/$name" >> "$GITHUB_PATH"
+
+      - name: Install Graphviz (Linux only, so the diagram path runs on one more system)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q graphviz
+
+      - name: Unit tests
+        run: |
+          for f in src/*.zig; do
+            if grep -q '^test "' "$f"; then echo "== $f"; zig test "$f"; fi
+          done
+
+      - name: Build
+        run: zig build-exe src/main.zig -O ReleaseSafe -target ${{ matrix.target }} -femit-bin=${{ matrix.out }}
+
+      - name: Smoke test
+        run: bash test/smoke.sh "./${{ matrix.out }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: ${{ matrix.out }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes
