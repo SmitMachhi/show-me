@@ -49,11 +49,15 @@
     }
 
     // Opens the note card at one element. `text` is its words, or the selected words.
-    function pick(el, kind, text) {
+    // `picture` is one image blob to attach. A card that already holds words gets the picture.
+    function pick(el, kind, text, picture) {
+        if (picture) setTimeout(() => post({ type: "image", blob: picture }));
         if (window.showmeCard.busy()) return;
         const part = el.closest("g.node,g.edge,g.cluster");
         const title = part && part.querySelector("title");
-        const note = { kind, selector: selectorOf(el), text: text.trim().slice(0, 500) };
+        // One full-window view shows a copy, which names the diagram in the page that it copies.
+        const within = el.closest("dialog[data-of]");
+        const note = { kind, selector: within ? within.dataset.of : selectorOf(el), text: text.trim().slice(0, 500) };
         if (title) note.node = title.textContent;
         const cell = cellOf(el);
         if (cell) note.cell = cell;
@@ -61,7 +65,7 @@
         (part || el).setAttribute("data-showme-picked", "");
         const label = note.node || (kind === "text" ? "“" + note.text.slice(0, 60) + "”" : note.text.slice(0, 60) || note.selector);
         const card = window.showmeCard;
-        card.open({ label, rect: (part || el).getBoundingClientRect() }, (words, sendNow, images) => {
+        card.open({ label, rect: (part || el).getBoundingClientRect(), within }, (words, sendNow, images) => {
             unmark("data-showme-picked");
             post(Object.assign({ type: "note", note: words, sendNow }, images.length ? { images } : {}, note));
         }, (file) => post({ type: "image", blob: file }));
@@ -128,6 +132,8 @@
         if (m.type === "restore") scrollTo(0, m.y);
         if (m.type === "imageDone") window.showmeCard.addImage(m.id, m.url);
     });
+
+    window.showmePick = pick; // graph.js calls this with one drawing
 
     // For pages that are forms: window.showme.send("Use plan B", { plan: "B" })
     window.showme = {

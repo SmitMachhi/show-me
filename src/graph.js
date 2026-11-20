@@ -1,5 +1,6 @@
 // Added to the reviewed page by show-me. Gives each diagram one full-window view with
-// zoom and pan. Zoom and pan only change the SVG viewBox, so the picture stays sharp.
+// zoom, pan and drawing (draw.js). Zoom and pan only change the SVG viewBox, so the
+// picture stays sharp.
 (function () {
     const ICONS = {
         expand: "M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3",
@@ -7,6 +8,9 @@
         plus: "M12 5v14M5 12h14",
         minus: "M5 12h14",
         fit: "M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4",
+        pen: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z",
+        undo: "M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11",
+        check: "M20 6 9 17l-5-5",
     };
     const CSS_TEXT =
         ".showme-graph{position:relative;margin:0}.showme-graph svg{max-width:100%;height:auto;display:block}" +
@@ -14,15 +18,18 @@
         "background:#fff;color:#333;cursor:pointer;box-shadow:0 0 0 1px #0000001a,0 2px 6px #0000001a;" +
         "transition:scale .08s cubic-bezier(.22,1,.36,1),opacity .08s cubic-bezier(.22,1,.36,1),background-color .08s}" +
         ".showme-btn:hover{background:#f3f4f6}.showme-btn:active{scale:.96}" +
+        ".showme-btn[aria-pressed=true]{background:#3657d6;color:#fff}.showme-btn:disabled{opacity:.4;cursor:default}" +
         ".showme-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}" +
         ".showme-graph>.showme-btn{position:absolute;top:8px;right:8px;opacity:0}" +
+        ".showme-graph>.showme-btn+.showme-btn{right:48px}" +
         ".showme-graph:hover>.showme-btn,.showme-btn:focus-visible{opacity:1}" +
         "@media(hover:none){.showme-graph>.showme-btn{opacity:1}}" +
         "dialog.showme-full{width:100vw;height:100vh;max-width:none;max-height:none;margin:0;border:0;padding:0;background:#fff}" +
         "dialog.showme-full[open]{animation:showme-in .09s cubic-bezier(.22,1,.36,1)}" +
         "@keyframes showme-in{from{opacity:0;scale:.985}}" +
         "dialog.showme-full.leaving{opacity:0;scale:.985;transition:opacity .07s cubic-bezier(.22,1,.36,1),scale .07s cubic-bezier(.22,1,.36,1)}" +
-        "dialog.showme-full svg{width:100%;height:100%;cursor:grab;touch-action:none}" +
+        "dialog.showme-full>svg{width:100%;height:100%;cursor:grab;touch-action:none}" +
+        "dialog.showme-full[data-tool=draw]>svg{cursor:crosshair}dialog.showme-full[data-tool=pan] .showme-ink{display:none}" +
         "dialog.showme-full nav{position:absolute;top:12px;right:12px;display:flex;gap:6px}" +
         "@media(prefers-reduced-motion:reduce){dialog.showme-full[open]{animation:none}.showme-btn{transition:none}}";
 
@@ -36,8 +43,8 @@
         return b;
     }
 
-    // Returns { zoom(k), fit() } for one SVG. k below 1 zooms in.
-    function panZoom(svg) {
+    // Returns { zoom(k), fit() } for one SVG. k below 1 zooms in. `active()` says if one drag pans now.
+    function panZoom(svg, active) {
         const home = svg.getAttribute("viewBox").split(/[ ,]+/).map(Number);
         let [x, y, w, h] = home;
         let from = null;
@@ -54,7 +61,7 @@
             const r = svg.getBoundingClientRect();
             zoom(e.deltaY < 0 ? 0.85 : 1.18, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
         }, { passive: false });
-        svg.addEventListener("pointerdown", (e) => { from = { cx: e.clientX, cy: e.clientY, x, y }; });
+        svg.addEventListener("pointerdown", (e) => { if (active()) from = { cx: e.clientX, cy: e.clientY, x, y }; });
         svg.addEventListener("pointermove", (e) => {
             if (!from) return;
             const r = svg.getBoundingClientRect();
@@ -85,35 +92,64 @@
         };
     }
 
-    function expand(svg) {
+    // The pen, undo and add buttons of one full-window view, with `sync(tool)` to redraw them.
+    function inkButtons(ink, onPen, onAdd) {
+        const pen = button("pen", "Draw", onPen);
+        const undo = button("undo", "Undo", ink.undo);
+        const add = button("check", "Add to note", onAdd);
+        undo.classList.add("showme-ink");
+        add.classList.add("showme-ink");
+        return {
+            all: [pen, undo, add],
+            sync(tool) {
+                pen.setAttribute("aria-pressed", tool === "draw");
+                undo.disabled = add.disabled = ink.count() === 0;
+            },
+        };
+    }
+
+    // Opens one diagram over the whole window. `tool` is "pan" or "draw": what one drag does.
+    function expand(svg, tool) {
         const full = document.createElement("dialog");
         const nav = document.createElement("nav");
         const copy = svg.cloneNode(true);
         full.className = "showme-full";
+        full.dataset.of = window.showmeSelector(svg.parentNode); // notes made here point at the diagram in the page
         copy.removeAttribute("width");
         copy.removeAttribute("height");
         full.append(copy, nav);
+        const sync = () => { full.dataset.tool = tool; bar.sync(tool); };
+        const ink = window.showmeDraw.attach(copy, () => tool === "draw", sync);
+        const view = panZoom(copy, () => tool === "pan");
         // Leaves the way it came, a little faster.
         const shut = () => {
+            if (ink.count() && !confirm("Discard the drawing?")) return;
             full.classList.add("leaving");
             setTimeout(() => full.remove(), 70);
         };
+        // Hands the picture to the note card at the diagram in the page.
+        const add = () => ink.png().then((blob) => {
+            full.remove();
+            window.showmePick(svg.parentNode, "drawing", ink.summary(), blob);
+        }, () => alert("Couldn't add the drawing."));
+        const bar = inkButtons(ink, () => { tool = tool === "draw" ? "pan" : "draw"; sync(); }, add);
         full.oncancel = (e) => { e.preventDefault(); shut(); }; // Esc
         document.body.append(full);
         full.showModal();
-        const view = panZoom(copy);
         nav.append(
+            ...bar.all,
             button("plus", "Zoom in", () => view.zoom(0.8)),
             button("minus", "Zoom out", () => view.zoom(1.25)),
             button("fit", "Fit", view.fit),
             button("close", "Close", shut),
         );
+        sync();
     }
 
     const style = document.createElement("style");
     style.textContent = CSS_TEXT;
     document.head.appendChild(style);
     for (const svg of document.querySelectorAll("figure.showme-graph > svg")) {
-        svg.after(button("expand", "Expand", () => expand(svg)));
+        svg.after(button("expand", "Expand", () => expand(svg, "pan")), button("pen", "Draw", () => expand(svg, "draw")));
     }
 })();

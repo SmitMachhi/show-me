@@ -1,7 +1,8 @@
 // Added to the reviewed page by show-me. The note card: one small box that opens at the
 // element the reviewer clicked, so they type where they point. It lives in its own
 // shadow root, so page styles cannot reach it and its styles cannot leak out.
-// Exposes window.showmeCard = { open(target, onQueue), close(), busy() }.
+// Exposes window.showmeCard = { open(target, onQueue, onImage), close(), busy(), addImage() }.
+// `target` is { label, rect, within }: `within` is the open full-window view, or null.
 (function () {
     const CSS_TEXT =
         ":host{all:initial;position:absolute;z-index:2147483647;width:300px;font:14px/1.4 system-ui,sans-serif}" +
@@ -39,10 +40,11 @@
     }
 
     // Places the card under the target, or above it when there is no room below.
-    function place(rect) {
+    // `scrolls` is false inside one full-window view, which does not move with the page.
+    function place(rect, scrolls) {
         const top = rect.bottom + 8 + 150 > innerHeight && rect.top > 170 ? rect.top - 150 : rect.bottom + 8;
-        host.style.top = scrollY + top + "px";
-        host.style.left = scrollX + Math.max(8, Math.min(rect.left, innerWidth - 308)) + "px";
+        host.style.top = (scrolls ? scrollY : 0) + top + "px";
+        host.style.left = (scrolls ? scrollX : 0) + Math.max(8, Math.min(rect.left, innerWidth - 308)) + "px";
     }
 
     // `onQueue(words, sendNow, pictureIds)` runs when the reviewer queues the note.
@@ -76,13 +78,15 @@
         };
         area.onkeydown = (e) => {
             e.stopPropagation();
-            if (e.key === "Escape" && !area.value.trim() && !pics.length) close();
+            if (e.key === "Escape") e.preventDefault(); // Esc must not also close the full-window view
+            if (e.key === "Escape" && !area.value.trim() && !pics.length) return close();
             if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
             e.preventDefault();
             queue(e.ctrlKey || e.metaKey);
         };
-        document.documentElement.append(host);
-        place(target.rect);
+        // One open full-window view covers the page, so the card must sit inside it.
+        (target.within || document.documentElement).append(host);
+        place(target.rect, !target.within);
         area.focus({ preventScroll: true });
     }
 
@@ -97,6 +101,7 @@
 
     // True while the card holds words or pictures. The caller must not replace it then.
     function busy() {
+        if (host && !host.isConnected) close(); // its full-window view went away
         if (!area || (!area.value.trim() && !pics.length)) return false;
         const box = area.parentNode;
         box.classList.remove("nudge");

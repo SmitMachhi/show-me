@@ -48,6 +48,7 @@ show-me wait plan.html --reply "Title fixed"  # shows the reply, then waits agai
 
 - One click on any element opens the note box at that element. Selected text opens the same box.
 - The note box and the chat accept pasted images.
+- The pen button on each diagram lets the reviewer draw on the diagram. The note contains the drawing as one image and the names of the nodes below the strokes.
 - The green number shows the changes since the last sent note. One click goes to the next change.
 - The amber number shows layout problems that the page found. One click sends all problems to the agent.
 - The disk keeps each note until the agent reads the note. If the agent command stops, the notes stay safe.
@@ -88,7 +89,7 @@ The `design` folder contains the system design as Graphviz files.
 
 Each change runs through build and test on Windows, Linux and macOS.
 
-Not available: whiteboard, public share links, phone access.
+Not available: shape editor for diagrams (the pen draws freehand strokes only), public share links, phone access.
 
 ## License
 

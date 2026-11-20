@@ -28,7 +28,7 @@ When you finish first, run `show-me end <file>`.
 ## Notes
 
 Each line is one note: `{"kind","selector","text","node","cell","note","images","issues","data"}`.
-`note` holds the person's words. `selector` is the CSS path of the element they clicked. `text` is its text, or the text they selected. `node` is the diagram node or edge name. `cell` gives the row and column names of one table cell. `images` lists image files the person attached: read each one. `issues` lists layout problems to fix, each with its selector. `data` comes from the page (see Forms).
+`note` holds the person's words. `selector` is the CSS path of the element they clicked. `text` is its text, or the text they selected. `node` is the diagram node or edge name. `cell` gives the row and column names of one table cell. `images` lists image files the person attached: read each one. Kind `drawing`: the person drew on one diagram in red. `text` names the nodes under the strokes and each line drawn from one node to another node; read the image only if `text` and `note` do not tell you the change. `issues` lists layout problems to fix, each with its selector. `data` comes from the page (see Forms).
 
 ## When to draw
 
