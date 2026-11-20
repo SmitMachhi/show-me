@@ -53,9 +53,9 @@
         host.setAttribute("data-showme-ui", "");
         const root = host.attachShadow({ mode: "closed" });
         root.innerHTML = "<style>" + CSS_TEXT + '</style><div class="box"><p class="where"></p>' +
-            '<textarea rows="3" aria-label="Comment" placeholder="Add a comment"></textarea><div class="pics"></div>' +
+            '<textarea rows="3" aria-label="Note" placeholder="Add a note"></textarea><div class="pics"></div>' +
             '<div class="bar"><small></small><button type="button">Cancel</button>' +
-            '<button type="button" class="go">Comment</button></div></div>';
+            '<button type="button" class="go">Add</button></div></div>';
         area = root.querySelector("textarea");
         strip = root.querySelector(".pics");
         root.querySelector(".where").textContent = target.label;
