@@ -78,7 +78,9 @@ If the file does not exist, no rule applies.
 
 ## Design
 
-One Zig program is the command and the background daemon. The program uses the Zig standard library and no packages. The daemon listens on 127.0.0.1 and on no other address. The daemon uses approximately 1.6 MB of memory. The daemon stops after 30 minutes without use.
+One Zig program is the command and the background daemon. The program uses the Zig standard library and no packages. The daemon listens on 127.0.0.1 and on no other address. The daemon stops after 30 minutes without use.
+
+Measured on Windows 11: one command takes 11 ms to 14 ms, and the daemon uses 1.5 MB of memory. `bench/README.md` shows each number and the method.
 
 The `design` folder contains the system design as Graphviz files.
 
