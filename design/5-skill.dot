@@ -1,0 +1,31 @@
+// show-me: how the skill decides what to do
+digraph skill {
+  rankdir=TB; nodesep=0.4; ranksep=0.5;
+  fontname="Arial"; fontsize=20; labelloc=t;
+  label="5. Skill decisions\nall of this is text in SKILL.md and one playbook file. No engine code.";
+  node [shape=box, style="rounded,filled", fillcolor="#ffffff", fontname="Arial", fontsize=12, margin="0.2,0.1", color="#555555"];
+  edge [fontname="Arial", fontsize=10, color="#555555"];
+
+  trig  [fillcolor="#eef3fb", label="Skill description matches:\nsystem design, architecture, data flow,\nmodule structure, how code fits together,\nplan, comparison, anything visual"];
+  rules [fillcolor="#eef3fb", label="Read rules/design.md, code.md, writing.md\n(every time)"];
+  q1    [shape=diamond, fillcolor="#fff6c9", label="4 or more\nconnected parts?"];
+  prose [label="Answer in chat.\nNo page, no graph"];
+  kind  [shape=diamond, fillcolor="#fff6c9", label="What is\nthe work?"];
+  k1 [fillcolor="#e2efdc", label="Designing system\nparts diagram +\none zoom-in per complex part"];
+  k2 [fillcolor="#e2efdc", label="Flow or request path\nstep chain,\ncolored by who acts"];
+  k3 [fillcolor="#e2efdc", label="Reading or planning code\nmodule graph:\nfiles, functions, who calls whom"];
+  k4 [fillcolor="#e2efdc", label="Comparing designs\ntwo parts diagrams\nside by side"];
+  k5 [fillcolor="#e2efdc", label="Changing design\nsame diagram,\nchanged nodes marked"];
+  q2    [shape=diamond, fillcolor="#fff6c9", label="Over 15 nodes\nor 20 edges?"];
+  split [label="Split into\nseveral diagrams"];
+  build [fillcolor="#dde8f8", label="write page from base.html with DOT blocks\n->  show-me check  ->  show-me open  ->  show-me wait"];
+
+  trig -> rules -> q1;
+  q1 -> prose [label="no"];
+  q1 -> kind  [label="yes, draw without asking"];
+  kind -> k1; kind -> k2; kind -> k3; kind -> k4; kind -> k5;
+  k1 -> q2; k2 -> q2; k3 -> q2; k4 -> q2; k5 -> q2;
+  q2 -> split [label="yes"];
+  q2 -> build [label="no"];
+  split -> build;
+}

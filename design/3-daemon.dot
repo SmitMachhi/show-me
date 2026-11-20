@@ -1,0 +1,58 @@
+// show-me: inside the daemon
+digraph daemon {
+  rankdir=LR; nodesep=0.35; ranksep=1.3;
+  fontname="Arial"; fontsize=20; labelloc=t;
+  label="3. Inside the daemon\nevery request first passes: Host header check, Origin check on writes, path confined to artifact folder";
+  node [shape=box, style="rounded,filled", fillcolor="#ffffff", fontname="Arial", fontsize=12, margin="0.18,0.1", color="#555555"];
+  edge [fontname="Arial", fontsize=10, color="#555555"];
+
+  subgraph cluster_in {
+    label="Who calls"; style="rounded,filled"; fillcolor="#f4f4f4"; color="#999999"; fontsize=13;
+    cli     [label="CLI", fillcolor="#dde8f8"];
+    browser [label="Browser", fillcolor="#f8eef3"];
+  }
+  subgraph cluster_routes {
+    label="Routes (HTTP from the standard library, one thread per connection)"; style="rounded,filled"; fillcolor="#e2efdc"; color="#7fa86b"; fontsize=13;
+    r_health [label="GET /health\nversion, pid"];
+    r_reg    [label="POST /reviews\nregister file path"];
+    r_wait   [label="GET /wait/<key>?cursor=N\nlong poll"];
+    r_ack    [label="POST /ack/<key>\nmove cursor"];
+    r_stop   [label="POST /shutdown"];
+    r_page   [label="GET /r/<key>\nreview page (ui.html)"];
+    r_art    [label="GET /a/<key>/*\nartifact + sibling files"];
+    r_send   [label="POST /send/<key>\nnotes"];
+    r_events [label="GET /events/<key>\nserver-sent events"];
+  }
+  subgraph cluster_core {
+    label="Core (in memory, rebuilt from disk at start)"; style="rounded,filled"; fillcolor="#d5e8cc"; color="#7fa86b"; fontsize=13;
+    registry [label="Review registry\nkey = hash of real file path\nfile, cursor, waiter, tabs"];
+    waker    [label="Waiter slot\none per review\nwoken by Send"];
+    presence [label="Presence\nnobody | listening | working"];
+    watcher  [label="File watcher\nmodified time, every 200 ms"];
+    idle     [label="Idle timer\nexit after 30 min\nno tab, no waiter"];
+  }
+  subgraph cluster_disk {
+    label="Disk"; style="rounded,filled"; fillcolor="#fbf6e6"; color="#c2a64a"; fontsize=13;
+    f_log  [label="<key>.notes.jsonl\nnote, reply, ack lines", shape=cylinder];
+    f_html [label="plan.html + assets", shape=note];
+    f_lock [label="daemon.json", shape=note];
+  }
+
+  cli -> r_health; cli -> r_reg; cli -> r_wait; cli -> r_ack; cli -> r_stop;
+  browser -> r_page; browser -> r_art; browser -> r_send; browser -> r_events;
+
+  r_health -> f_lock  [label="same pid, version", style=dashed];
+  r_reg  -> registry;
+  r_wait -> waker     [label="park here"];
+  r_wait -> f_log     [label="read past cursor"];
+  r_ack  -> f_log     [label="append ack"];
+  r_send -> f_log     [label="append note"];
+  r_send -> waker     [label="wake"];
+  r_art  -> f_html    [label="read, add script tag"];
+  r_events -> presence[label="stream", dir=back];
+  r_events -> watcher [label="reload", dir=back];
+  waker -> presence   [label="parked = listening", style=dashed];
+  watcher -> f_html   [label="stat"];
+  watcher -> presence [label="changed after delivery = working", style=dashed];
+  registry -> idle    [style=dashed];
+}

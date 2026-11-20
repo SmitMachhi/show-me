@@ -1,0 +1,26 @@
+// show-me: the parts and what crosses between them
+digraph parts {
+  rankdir=LR; nodesep=0.5; ranksep=1.2;
+  fontname="Arial"; fontsize=20; labelloc=t;
+  label="1. Parts\none Zig binary = CLI + daemon  |  loopback only  |  standard library only";
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=13, margin="0.25,0.15", color="#555555"];
+  edge [fontname="Arial", fontsize=11, color="#555555"];
+
+  skill  [fillcolor="#eef3fb", shape=folder, label="SKILL\n\nSKILL.md   workflow + auto-draw rule\nrules/design.md  code.md  writing.md\nplaybook for diagram kinds\nbase.html   plain-CSS starting page"];
+  agent  [fillcolor="#eef3fb", label="AGENT\n(comes and goes)\n\nwrites plan.html with DOT blocks\ndraws design and code work\nwithout asking"];
+  cli    [fillcolor="#dde8f8", label="show-me.exe as CLI\n(about 11 ms per call, measured)\n\ncheck <file>      rules lint, DOT blocks to SVG\nopen <file>       start review, return at once\nwait <file>       block until notes arrive\nstop              end the daemon"];
+  daemon [fillcolor="#e2efdc", label="show-me.exe as DAEMON\n(long-lived, about 1 MB)\n127.0.0.1, one fixed port\n\nserves page and artifact\naccepts notes at any time\nholds the wait request open\nwatches the file, reports presence"];
+  browser[fillcolor="#f8eef3", label="BROWSER TAB\n(your clock)\n\nside panel: notes, replies, presence, Send\nsandboxed iframe: your artifact + inject.js\ngraph preview panels: expand, zoom, pan"];
+  disk   [fillcolor="#fbf6e6", shape=cylinder, label="DISK\n(source of truth)\n\nplan.html + assets\n<key>.notes.jsonl  append-only\ndaemon.json  port, pid, version"];
+  you    [fillcolor="#fff6c9", shape=oval, label="YOU\nread, point, type"];
+
+  skill -> agent   [label="rules, template,\nwhen to draw", style=dashed];
+  agent -> cli     [label="runs commands"];
+  cli -> daemon    [label="HTTP on loopback"];
+  daemon -> cli    [label="notes as JSON lines"];
+  cli -> agent     [label="lint errors, notes", constraint=false, style=dashed];
+  daemon -> browser[label="page, artifact,\nevents (reload, presence, reply)"];
+  browser -> daemon[label="POST notes"];
+  you -> browser   [label="click, select, type"];
+  daemon -> disk   [label="append notes,\nread artifact"];
+}

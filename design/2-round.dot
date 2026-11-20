@@ -1,0 +1,25 @@
+// show-me: one review round, step by step
+digraph round {
+  rankdir=TB; nodesep=0.4; ranksep=0.42;
+  fontname="Arial"; fontsize=20; labelloc=t;
+  label="2. One review round\nblue = agent side   green = daemon   pink = you";
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=13, margin="0.25,0.12", color="#555555", width=7.6];
+  edge [color="#555555", fontname="Arial", fontsize=11];
+
+  s0 [fillcolor="#eef3fb", label="0. Skill triggers: the work is system design, one flow, or code structure\n4 or more connected parts = draw. Fewer = answer in one sentence"];
+  s1 [fillcolor="#dde8f8", label="1. Agent writes plan.html from base.html and the rule files\ndiagrams go in as DOT blocks, one per diagram (split above 15 nodes)"];
+  s2 [fillcolor="#dde8f8", label="2. Engine turns each DOT block into inline SVG with Graphviz\nabout 50 ms each. The agent never reads the SVG"];
+  s3 [fillcolor="#dde8f8", label="3. show-me check plan.html\nfails on rule breaks, exit 1. Agent fixes and repeats"];
+  s4 [fillcolor="#dde8f8", label="4. show-me open plan.html\nstarts daemon if absent, registers the review, returns at once"];
+  s5 [fillcolor="#e2efdc", label="5. Daemon serves review page. Browser opens it\nartifact loads in sandboxed iframe with one added script tag"];
+  s6 [fillcolor="#dde8f8", label="6. show-me wait plan.html\none HTTP request held open. Zero tokens. Presence = listening"];
+  s7 [fillcolor="#f8eef3", label="7. You read. Expand any graph to full window, zoom, pan\nclick node, edge, element or text. Write notes. Press Send"];
+  s8 [fillcolor="#e2efdc", label="8. Daemon appends each note to <key>.notes.jsonl\nthen wakes the held request"];
+  s9 [fillcolor="#dde8f8", label="9. wait prints notes as JSON lines (graph notes carry the node id)\nsends ack, exits 0. Killed command loses nothing"];
+  s10[fillcolor="#dde8f8", label="10. Agent edits plan.html (text or DOT blocks) and reruns check\nwatcher sees the change: page reloads, presence = working"];
+  s11[fillcolor="#dde8f8", label="11. show-me wait plan.html --reply \"what I changed\"\nreply shows in side panel"];
+
+  s0 -> s1 -> s2 -> s3 -> s4 -> s5 -> s6 -> s7 -> s8 -> s9 -> s10 -> s11;
+  s11 -> s7 [label="  next round", style=dashed, constraint=false];
+  s3 -> s2  [label="  fix", style=dashed, constraint=false];
+}
