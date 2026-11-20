@@ -19,6 +19,7 @@ If `wait` is stopped by one time limit, run the same command again. No note is l
 The note `{"kind":"end"}` means the person ended the review. Stop, and answer in chat. Do not open that file again unless they ask; then use `show-me open <file> --reopen`.
 When you finish first, run `show-me end <file>`.
 `show-me export <file>` writes one file that opens without show-me, for sharing.
+`show-me` alone lists every review and its unread notes. Use it to resume one.
 
 ## Notes
 
