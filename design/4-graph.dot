@@ -1,35 +1,36 @@
-// show-me: graphs. The agent writes DOT only. The engine calls Graphviz and inlines the SVG.
+// show-me: graphs. The agent writes DOT only. The daemon calls Graphviz when it serves the page.
 digraph graphmod {
   rankdir=LR; nodesep=0.35; ranksep=0.6;
   fontname="Arial"; fontsize=20; labelloc=t;
-  label="4. Graphs\nthe agent writes DOT (2 to 3 KB) and never sees the SVG (14 to 28 KB)\nGraphviz with core-only plugins: about 50 ms per diagram, not 1,100";
+  label="4. Graphs\nthe agent writes DOT (2 to 3 KB per diagram) and never handles the SVG (14 to 28 KB)\nthe file on disk keeps only the DOT";
   node [shape=box, style="rounded,filled", fillcolor="#ffffff", fontname="Arial", fontsize=12, margin="0.18,0.1", color="#555555"];
   edge [fontname="Arial", fontsize=10, color="#555555"];
 
-  src [label="plan.html\n<script type=\"text/vnd.graphviz\">\nDOT text\n</script>", shape=note, fillcolor="#fbf6e6"];
+  src [label="plan.html on disk\nDOT text in script blocks\nno SVG", shape=note, fillcolor="#fbf6e6"];
 
   subgraph cluster_engine {
-    label="engine: runs inside check and open"; style="rounded,filled"; fillcolor="#dde8f8"; color="#7a93bd"; fontsize=13;
-    find  [label="1. Find each DOT block\nskip blocks whose SVG\nis already current (hash)"];
-    dot   [label="2. Run dot -Tsvg\ncore + layout plugins only\nfonts with built-in metrics"];
-    bake  [label="3. Write SVG into the file\nright after its DOT block\nnode names stay in <title>"];
-    err   [label="Graphviz missing or DOT error\n= one clear message with\nthe install command, exit 1", fillcolor="#fde8e8", color="#b05050"];
+    label="graphs.zig: runs in check, in open, and each time the daemon serves the page"; style="rounded,filled"; fillcolor="#dde8f8"; color="#7a93bd"; fontsize=13;
+    find  [label="1. Find each DOT block"];
+    cache [label="2. Look up the SVG\nby hash of the DOT text\nin the state folder", shape=cylinder, fillcolor="#fbf6e6"];
+    dot   [label="3. Cache miss: run dot -Tsvg\nWindows: core and layout plugins only\nabout 50 ms, not 1,100"];
+    put   [label="4. Put <figure> with the SVG\nafter the block\nin the served copy only"];
+    err   [label="DOT error or Graphviz missing\ncheck and open: one line, exit 1\nserved page: the message in place", fillcolor="#fde8e8", color="#b05050"];
   }
-
-  out [label="plan.html on disk\nDOT + inline SVG\nrenders without show-me", shape=note, fillcolor="#fbf6e6"];
 
   subgraph cluster_browser {
     label="inject.js in the sandboxed iframe"; style="rounded,filled"; fillcolor="#f8eef3"; color="#b87a98"; fontsize=13;
-    panel  [label="Preview panel\nfit to column width\nexpand button"];
-    full   [label="Full window\nnative <dialog>\nwheel = zoom, drag = pan\nEsc = close"];
-    click  [label="Click node or edge\nnote carries its name"];
+    panel  [label="Diagram in the page\nfit to column width\nExpand button"];
+    full   [label="Full window\nnative <dialog>\nwheel = zoom, drag = pan"];
+    click  [label="Click node, edge or cluster\nnote carries its name"];
   }
-  notes [label="Note to agent\n{ target: node name, text }", shape=cylinder, fillcolor="#fbf6e6"];
+  notes [label="Note to agent\n{ node: name, note: words }", shape=cylinder, fillcolor="#fbf6e6"];
 
-  src -> find -> dot -> bake -> out -> panel;
+  src -> find -> cache -> put -> panel;
+  cache -> dot [label="miss"];
+  dot -> cache [label="store"];
   dot -> err [style=dashed];
-  panel -> full [label="expand"];
-  full -> panel [label="close", style=dashed, constraint=false];
+  panel -> full [label="Expand"];
+  full -> panel [label="Close", style=dashed, constraint=false];
   panel -> click; full -> click;
   click -> notes;
 }

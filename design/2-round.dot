@@ -8,8 +8,8 @@ digraph round {
 
   s0 [fillcolor="#eef3fb", label="0. Skill triggers: the work is system design, one flow, or code structure\n4 or more connected parts = draw. Fewer = answer in one sentence"];
   s1 [fillcolor="#dde8f8", label="1. Agent writes plan.html from base.html and the rule files\ndiagrams go in as DOT blocks, one per diagram (split above 15 nodes)"];
-  s2 [fillcolor="#dde8f8", label="2. Engine turns each DOT block into inline SVG with Graphviz\nabout 50 ms each. The agent never reads the SVG"];
-  s3 [fillcolor="#dde8f8", label="3. show-me check plan.html\nfails on rule breaks, exit 1. Agent fixes and repeats"];
+  s2 [fillcolor="#dde8f8", label="2. show-me check plan.html draws each DOT block and checks the words\nprints one line per problem. Agent fixes and repeats"];
+  s3 [fillcolor="#dde8f8", label="3. Each diagram is drawn once and kept by the hash of its DOT\nthe agent never handles the SVG"];
   s4 [fillcolor="#dde8f8", label="4. show-me open plan.html\nstarts daemon if absent, registers the review, returns at once"];
   s5 [fillcolor="#e2efdc", label="5. Daemon serves review page. Browser opens it\nartifact loads in sandboxed iframe with one added script tag"];
   s6 [fillcolor="#dde8f8", label="6. show-me wait plan.html\none HTTP request held open. Zero tokens. Presence = listening"];
