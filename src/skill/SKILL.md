@@ -5,6 +5,10 @@ description: Show plans, system designs, code structure, comparisons and other v
 
 # show-me
 
+## Goal
+
+Some answers have shape: parts, connections, steps, choices. Text hides that shape. Explain with visuals, not with text only. Build the page from diagrams, visual modules and graphics, so the person sees the structure and can point at one part of it.
+
 Needs the `show-me` program on PATH. Diagrams need Graphviz.
 
 ## Loop
@@ -56,7 +60,8 @@ Write DOT, never SVG. The program draws it:
 - Every element must help the reader. No eyebrow labels, badges, icon tiles, gradient text or filler paragraphs.
 - Lead with the decision or the answer. Put detail below it.
 - Plain HTML and the CSS in `base.html`. No framework, no file from another site.
-- Tables for records. Diagrams for relations. Prose only for reasons and open questions.
+- Show first, then tell. Before each paragraph, ask if one visual module can carry it: diagram for relations, table for records, side-by-side columns for options, step chain for sequence, labeled figure for one thing with parts.
+- Prose only for reasons and open questions. Keep it under each visual, short.
 - Verify each claim against the code before it goes on the page.
 
 ## Forms
