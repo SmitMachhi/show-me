@@ -80,3 +80,7 @@ The `design` folder has the system design as Graphviz files.
 I run it on Windows. The Linux and macOS builds compile, and nobody has run them yet.
 
 Still missing: whiteboard, public share links, access from your phone.
+
+## License
+
+MIT. See `LICENSE`.
