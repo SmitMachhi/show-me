@@ -10,8 +10,7 @@ const Request = std.http.Server.Request;
 const Header = std.http.Header;
 
 const ui_html = @embedFile("ui.html");
-const inject_js = @embedFile("inject.js");
-const script_tag = "\n<script src=\"/inject.js\"></script>\n";
+const script_tag = "\n<script src=\"/inject.js\"></script><script src=\"/graph.js\"></script>\n";
 const max_file_bytes = 64 * 1024 * 1024;
 // Sent with every reviewed file, so one opened outside the review frame still has no origin.
 const sandbox: Header = .{ .name = "content-security-policy", .value = "sandbox allow-scripts allow-forms allow-popups allow-modals" };
@@ -29,8 +28,20 @@ pub fn page(req: *Request) !void {
     });
 }
 
-pub fn script(req: *Request) !void {
-    return respond(req, .ok, inject_js, &.{ .{ .name = "content-type", .value = "text/javascript" }, no_store });
+// Files built into the program. Serves one and returns true, or returns false.
+pub fn asset(req: *Request, path: []const u8) !bool {
+    const files = [_][3][]const u8{
+        .{ "/inject.js", @embedFile("inject.js"), "text/javascript" },
+        .{ "/graph.js", @embedFile("graph.js"), "text/javascript" },
+        .{ "/ui.js", @embedFile("ui.js"), "text/javascript" },
+        .{ "/ui.css", @embedFile("ui.css"), "text/css" },
+    };
+    for (files) |f| {
+        if (!std.mem.eql(u8, path, f[0])) continue;
+        try respond(req, .ok, f[1], &.{ .{ .name = "content-type", .value = f[2] }, no_store });
+        return true;
+    }
+    return false;
 }
 
 fn mime(path: []const u8) []const u8 {

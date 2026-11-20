@@ -4,161 +4,45 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>show-me</title>
-<style>
-    * { box-sizing: border-box; }
-    body { margin: 0; display: flex; height: 100vh; font: 14px/1.4 system-ui, sans-serif; }
-    iframe { flex: 1; border: 0; min-width: 0; background: #fff; }
-    aside { width: 340px; display: flex; flex-direction: column; border-left: 1px solid #8884; }
-    #agent { margin: 0; padding: 8px 12px; border-bottom: 1px solid #8884; }
-    #list { flex: 1; overflow: auto; margin: 0; padding: 0 12px; list-style: none; }
-    #list li { padding: 8px 0; border-bottom: 1px solid #8883; overflow-wrap: anywhere; white-space: pre-wrap; }
-    #list small { display: block; opacity: 0.7; }
-    #list button { float: right; }
-    form { padding: 12px; border-top: 1px solid #8884; }
-    #target { margin: 0 0 6px; overflow-wrap: anywhere; }
-    #target:empty { display: none; }
-    textarea { width: 100%; font: inherit; resize: vertical; }
-    #row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
-    #status { flex: 1; margin: 0; }
-    @media (max-width: 760px) {
-        body { flex-direction: column; }
-        aside { width: auto; height: 45vh; border-left: 0; border-top: 1px solid #8884; }
-    }
-</style>
+<link rel="stylesheet" href="/ui.css">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-checks" viewBox="0 0 24 24"><path d="M17 6 6 17l-4-4M22 10l-7.5 7.5L13 16"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-pointer" viewBox="0 0 24 24"><path d="m4 4 6.5 16 2.3-6.7L19.5 11z"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></symbol>
+    <symbol id="i-graph" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="m8.2 8.2 7.6 7.6"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 14a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-page" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></symbol>
+    <symbol id="i-agent" viewBox="0 0 24 24"><path d="M12 3v3M6 10a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2zM10 13v1M14 13v1"/></symbol>
+</svg>
 <iframe id="page" title="Page under review" sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
 <aside>
-    <p id="agent" role="status"></p>
+    <header>
+        <strong>show-me</strong>
+        <span id="agent" class="presence" data-state="nobody" role="status"><i></i><span></span></span>
+    </header>
     <ul id="list"></ul>
-    <form id="form">
-        <p id="target"></p>
-        <textarea id="note" rows="3" aria-label="Note" placeholder="Click part of the page, or type one message here"></textarea>
-        <div id="row">
-            <p id="status"></p>
-            <button type="submit">Add</button>
-            <button type="button" id="send">Send</button>
+    <p id="empty"><svg class="icon"><use href="#i-pointer"/></svg>Click any part of the page to leave one note.</p>
+    <p id="status" role="alert"></p>
+    <form id="form" class="composer">
+        <div id="target" class="chip" hidden>
+            <svg class="icon"><use/></svg><span></span>
+            <button type="button" id="clear" class="plain" aria-label="Clear the target"><svg class="icon"><use href="#i-x"/></svg></button>
+        </div>
+        <textarea id="note" rows="2" aria-label="Note" placeholder="Write one note"></textarea>
+        <div class="bar">
+            <small>Enter adds. Ctrl+Enter sends.</small>
+            <button type="submit" class="ghost">Add</button>
+            <button type="button" id="send" class="send" aria-label="Send notes">
+                <b id="count"></b>
+                <svg class="icon go"><use href="#i-send"/></svg>
+                <svg class="icon done"><use href="#i-check"/></svg>
+            </button>
         </div>
     </form>
 </aside>
-<script>
-const key = location.pathname.split("/").pop();
-const el = (id) => document.getElementById(id);
-const page = el("page");
-const note = el("note");
-const store = "showme:" + key;
-const AGENT = {
-    nobody: "No agent listens. Your notes wait.",
-    listening: "Agent listens.",
-    working: "Agent works on your notes.",
-};
-let sent = [];
-let queue = [];
-let target = null;
-try { queue = JSON.parse(sessionStorage.getItem(store)) || []; } catch (e) { queue = []; }
-
-function label(n) {
-    if (n.node) return "Graph: " + n.node;
-    if (n.kind === "text") return "Text: “" + n.text.slice(0, 80) + "”";
-    if (n.selector) return n.selector;
-    return n.kind === "page" ? "From the page" : "Message";
-}
-
-function row(top, text, onRemove) {
-    const li = document.createElement("li");
-    const where = document.createElement("small");
-    where.textContent = top;
-    if (onRemove) {
-        const remove = document.createElement("button");
-        remove.textContent = "Remove";
-        remove.onclick = onRemove;
-        li.append(remove);
-    }
-    li.append(where, text);
-    return li;
-}
-
-function render() {
-    try { sessionStorage.setItem(store, JSON.stringify(queue)); } catch (e) {}
-    const list = el("list");
-    list.textContent = "";
-    for (const s of sent) {
-        list.append(s.agent ? row("Agent", s.text) : row(label(s.note) + " · " + s.state, s.note.note || ""));
-    }
-    queue.forEach((n, i) => {
-        list.append(row(label(n) + " · Not sent", n.note, () => { queue.splice(i, 1); render(); }));
-    });
-    list.scrollTop = list.scrollHeight;
-    el("target").textContent = target ? "On: " + label(target) : "";
-    el("send").disabled = queue.length === 0 && !note.value.trim();
-}
-
-// The log is the record: notes, then acks from the agent's command, then replies.
-async function loadLog() {
-    const lines = (await (await fetch("/log/" + key)).text()).split("\n");
-    const out = [];
-    for (const line of lines) {
-        let e;
-        try { e = JSON.parse(line); } catch (err) { continue; }
-        if (e.t === "note") out.push({ note: e.data, state: "Not seen yet" });
-        const notes = out.filter((s) => !s.agent);
-        if (e.t === "ack") notes.slice(0, e.n).forEach((s) => { if (s.state === "Not seen yet") s.state = "Seen"; });
-        if (e.t === "reply") {
-            notes.forEach((s) => { if (s.state === "Seen") s.state = "Done"; });
-            out.push({ agent: true, text: e.text });
-        }
-    }
-    sent = out;
-    render();
-}
-
-function add() {
-    const text = note.value.trim();
-    if (!text) return;
-    queue.push(Object.assign({ kind: "message" }, target, { note: text }));
-    note.value = "";
-    target = null;
-    render();
-}
-
-async function send() {
-    add();
-    if (!queue.length) return;
-    try {
-        const r = await fetch("/send/" + key, { method: "POST", body: JSON.stringify(queue) });
-        if (!r.ok) throw new Error(r.status);
-        el("status").textContent = "";
-        queue = [];
-    } catch (e) {
-        el("status").textContent = "Not sent. Run show-me open again, then press Send.";
-    }
-    render();
-}
-
-addEventListener("message", (e) => {
-    const m = e.data;
-    if (e.source !== page.contentWindow || !m || m.source !== "showme") return;
-    if (m.type === "pick") {
-        target = { kind: m.kind, selector: m.selector, text: m.text, node: m.node };
-        note.focus();
-    } else if (m.type === "note") {
-        queue.push({ kind: "page", note: m.note, data: m.data });
-    }
-    render();
-});
-
-el("form").onsubmit = (e) => { e.preventDefault(); add(); };
-el("send").onclick = send;
-note.oninput = render;
-note.onkeydown = (e) => {
-    if (e.key !== "Enter" || e.shiftKey) return;
-    e.preventDefault();
-    if (e.ctrlKey || e.metaKey) send(); else add();
-};
-new EventSource("/events/" + key).onmessage = (e) => {
-    if (e.data === "reload") page.src = "/a/" + key + "/?t=" + Date.now();
-    if (e.data === "log") loadLog();
-    if (e.data.startsWith("presence ")) el("agent").textContent = AGENT[e.data.slice(9)] || "";
-};
-page.src = "/a/" + key + "/";
-loadLog();
-</script>
+<script src="/ui.js"></script>
 </html>

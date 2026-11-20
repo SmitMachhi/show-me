@@ -72,7 +72,7 @@ fn route(sh: *reviews.Shared, req: *Request, port: u16, arena: std.mem.Allocator
         try reply(req, .ok, "bye\n");
         std.process.exit(0);
     }
-    if (method == .GET and std.mem.eql(u8, path, "/inject.js")) return pages.script(req);
+    if (method == .GET and try pages.asset(req, path)) return;
     if (method == .POST and std.mem.eql(u8, path, "/reviews")) {
         const key = reviews.register(sh, arena, body) catch return reply(req, .bad_request, "bad path\n");
         // Key, then how many browser tabs already show this review.
