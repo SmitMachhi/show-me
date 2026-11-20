@@ -8,6 +8,7 @@ const pages = @import("pages.zig");
 const presence = @import("presence.zig");
 const guard = @import("guard.zig");
 const images = @import("images.zig");
+const housekeeping = @import("housekeeping.zig");
 const Io = std.Io;
 const net = Io.net;
 const Request = std.http.Server.Request;
@@ -29,6 +30,7 @@ pub fn serve(init: std.process.Init) !void {
     try state.writeInfo(io, d, port);
     stdout.writeStreamingAll(io, "ready\n") catch {};
     var shared: reviews.Shared = .{ .io = io, .dir = d, .env = init.environ_map };
+    housekeeping.start(&shared);
     while (true) {
         const s = server.accept(io) catch continue;
         const t = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, handle, .{ &shared, s, port }) catch {
