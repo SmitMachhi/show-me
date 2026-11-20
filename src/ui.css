@@ -38,7 +38,7 @@ button:active { scale: 0.96; }
 button:disabled { opacity: 0.4; cursor: default; scale: 1; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tool { position: relative; display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; border-radius: 8px; color: var(--muted); }
-.tool:hover, #menu button:hover { background: var(--line); color: var(--text); }
+.tool:hover, #menu button:hover, #layoutMenu button:hover { background: var(--line); color: var(--text); }
 #badge { position: absolute; top: 0; right: 0; min-width: 14px; padding: 0 3px; border-radius: 7px; background: var(--accent); color: var(--on-accent); font-size: 10px; line-height: 14px; font-variant-numeric: tabular-nums; }
 #badge:empty, body:not(.collapsed) #badge { display: none; }
 .switch { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 8px; color: var(--muted); }
@@ -48,10 +48,10 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .switch[aria-checked="true"] i { background: var(--accent); }
 .switch[aria-checked="true"] i::after { translate: 12px 0; }
 .menu { position: relative; }
-#menu { position: absolute; top: 38px; right: 0; width: 200px; padding: 4px; border-radius: 12px; background: var(--surface); box-shadow: var(--pop); transform-origin: 100% 0; animation: pop 0.09s var(--ease); }
-#menu[hidden] { display: none; }
+#menu, #layoutMenu { position: absolute; top: 38px; right: 0; width: 200px; padding: 4px; border-radius: 12px; background: var(--surface); box-shadow: var(--pop); transform-origin: 100% 0; animation: pop 0.09s var(--ease); }
+#menu[hidden], #layoutMenu[hidden], #layout[hidden] { display: none; }
 @keyframes pop { from { opacity: 0; scale: 0.96; } }
-#menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; text-align: left; }
+#menu button, #layoutMenu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; text-align: left; }
 
 /* Chat: your notes on the right, the agent on the left. */
 #list { flex: 1; overflow: auto; margin: 0; padding: 12px; list-style: none; display: flex; flex-direction: column; gap: 4px; }
@@ -132,3 +132,10 @@ textarea { display: block; flex: 1; min-width: 0; padding: 6px 4px; border: 0; o
 /* How many blocks of the page changed since the last send. Click to step through them. */
 #changes { height: 24px; padding: 0 10px; border-radius: 12px; background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); font-size: 12px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; animation: pop 0.09s var(--ease); }
 #changes[hidden] { display: none; }
+/* Layout problems the page found in itself. Same shape as the change count, in the warning color. */
+#layout { height: 24px; padding: 0 10px; border-radius: 12px; background: color-mix(in srgb, var(--busy) 18%, transparent); color: var(--busy); font-size: 12px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#layoutMenu { top: 32px; width: 280px; max-height: 60vh; overflow: auto; }
+#layoutMenu button { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#layoutMenu small { display: block; color: var(--muted); }
+#layoutMenu .primary { margin-top: 4px; text-align: center; background: var(--accent); color: var(--on-accent); }
+#layoutMenu .primary:hover { background: var(--accent); color: var(--on-accent); opacity: 0.9; }

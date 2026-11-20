@@ -14,21 +14,7 @@
     const root = document.documentElement;
     let annotate = root.getAttribute("data-showme-annotate") !== "off";
 
-    function selectorOf(el) {
-        const parts = [];
-        while (el && el.nodeType === 1 && el !== root) {
-            let part = el.tagName.toLowerCase();
-            if (el.id) {
-                parts.unshift(part + "#" + CSS.escape(el.id));
-                break;
-            }
-            const twins = [...el.parentNode.children].filter((c) => c.tagName === el.tagName);
-            if (twins.length > 1) part += ":nth-of-type(" + (twins.indexOf(el) + 1) + ")";
-            parts.unshift(part);
-            el = el.parentNode;
-        }
-        return parts.join(" > ");
-    }
+    const selectorOf = window.showmeSelector;
 
     function post(msg) {
         parent.postMessage(Object.assign({ source: "showme" }, msg), "*");

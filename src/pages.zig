@@ -11,7 +11,9 @@ const Request = std.http.Server.Request;
 const Header = std.http.Header;
 
 const ui_html = @embedFile("ui.html");
-const script_tag = "\n<script src=\"/card.js\"></script><script src=\"/inject.js\"></script><script src=\"/graph.js\"></script><script src=\"/changes.js\"></script>\n";
+// Order matters: selector.js and card.js define what inject.js and layout.js call.
+const script_tag = "\n<script src=\"/selector.js\"></script><script src=\"/card.js\"></script><script src=\"/inject.js\"></script>" ++
+    "<script src=\"/graph.js\"></script><script src=\"/changes.js\"></script><script src=\"/layout.js\"></script>\n";
 const max_file_bytes = 64 * 1024 * 1024;
 // Sent with every reviewed file, so one opened outside the review frame still has no origin.
 const sandbox: Header = .{ .name = "content-security-policy", .value = "sandbox allow-scripts allow-forms allow-popups allow-modals" };
@@ -40,6 +42,10 @@ pub fn asset(req: *Request, path: []const u8) !bool {
         .{ "/ui-images.js", @embedFile("ui-images.js"), "text/javascript" },
         .{ "/ui-changes.js", @embedFile("ui-changes.js"), "text/javascript" },
         .{ "/changes.js", @embedFile("changes.js"), "text/javascript" },
+        .{ "/layout.js", @embedFile("layout.js"), "text/javascript" },
+        .{ "/selector.js", @embedFile("selector.js"), "text/javascript" },
+        .{ "/ui-log.js", @embedFile("ui-log.js"), "text/javascript" },
+        .{ "/ui-layout.js", @embedFile("ui-layout.js"), "text/javascript" },
         .{ "/ui.js", @embedFile("ui.js"), "text/javascript" },
         .{ "/ui.css", @embedFile("ui.css"), "text/css" },
     };

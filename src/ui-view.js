@@ -29,6 +29,7 @@ function quote(n) {
     else if (n.cell) [name, text] = ["table", [n.cell.row, n.cell.column].filter(Boolean).join(" / ")];
     else if (n.kind === "text") name = "text";
     else if (n.kind === "page") [name, text] = ["page", "Form answer"];
+    else if (n.kind === "layout") [name, text] = ["panel", n.issues.length === 1 ? "1 layout issue" : n.issues.length + " layout issues"];
     else if (!n.selector) return null;
     const q = make("div", "quote");
     q.append(icon(name), make("span", "", text));

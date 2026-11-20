@@ -5,6 +5,8 @@ import { sentRow, queuedRow } from "/ui-view.js";
 import { initBar } from "/ui-bar.js";
 import { createImages } from "/ui-images.js";
 import { createChanges } from "/ui-changes.js";
+import { parseLog } from "/ui-log.js";
+import { createLayout } from "/ui-layout.js";
 
 const key = location.pathname.split("/").pop();
 const el = (id) => document.getElementById(id);
@@ -30,6 +32,10 @@ let replies = -1;
 let unseenReply = false;
 const images = createImages(key, () => render());
 const changes = createChanges(key, tell);
+const layout = createLayout(tell, (issues) => {
+    queue.push({ kind: "layout", note: "Fix these layout issues.", issues });
+    render();
+});
 
 const bar = initBar({
     mode: setMode,
@@ -79,30 +85,13 @@ function reveal(selector) {
     tell({ type: "reveal", selector });
 }
 
-// The log is the record: notes, acks from the agent's command, replies, end and start.
 async function loadLog() {
-    const lines = (await (await fetch("/log/" + key)).text()).split("\n");
-    const out = [];
-    let over = false;
-    for (const line of lines) {
-        let e;
-        try { e = JSON.parse(line); } catch (err) { continue; }
-        const notes = out.filter((s) => !s.agent);
-        if (e.t === "open") file = e.file;
-        if (e.t === "note") out.push({ note: e.data, state: "Sent" });
-        if (e.t === "ack") notes.slice(0, e.n).forEach((s) => { if (s.state === "Sent") s.state = "Seen"; });
-        if (e.t === "reply") {
-            notes.forEach((s) => { if (s.state === "Seen") s.state = "Done"; });
-            out.push({ agent: true, text: e.text });
-        }
-        if (e.t === "end") over = true;
-        if (e.t === "start") over = false;
-    }
-    const count = out.filter((s) => s.agent).length;
-    if (replies >= 0 && count > replies && document.body.classList.contains("collapsed")) unseenReply = true;
-    replies = count;
-    sent = out;
-    ended = over;
+    const log = parseLog(await (await fetch("/log/" + key)).text());
+    if (replies >= 0 && log.replies > replies && document.body.classList.contains("collapsed")) unseenReply = true;
+    replies = log.replies;
+    sent = log.rows;
+    file = log.file;
+    ended = log.ended;
     render();
 }
 
@@ -140,6 +129,7 @@ addEventListener("message", (e) => {
     const m = e.data;
     if (e.source !== page.contentWindow || !m || m.source !== "showme") return;
     changes.onMessage(m);
+    layout.onMessage(m);
     if (m.type === "ready") {
         bar.setTitle(m.title);
         setMode(saved("mode", m.annotate));
