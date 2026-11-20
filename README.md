@@ -1,6 +1,14 @@
 # show-me
 
-The agent writes one HTML page. show-me opens the page in the browser. The reviewer clicks one part of the page and writes one note. The agent receives the note and the exact element.
+## Goal
+
+Some answers have shape: parts, connections, steps, choices. Text hides that shape. The reader must build the picture from sentences.
+
+show-me makes the agent explain with visuals, not with text only. The agent builds the page from diagrams, visual modules and graphics. The reviewer sees the structure, then points at the part in question.
+
+## How it works
+
+The agent makes HTML page. show-me opens the page in the browser. The reviewer clicks one part of the page and writes one note. The agent receives the note and the exact element.
 
 ## Install
 
