@@ -18,6 +18,7 @@ Needs the `show-me` program on PATH. Diagrams need Graphviz.
 If `wait` is stopped by one time limit, run the same command again. No note is lost.
 The note `{"kind":"end"}` means the person ended the review. Stop, and answer in chat. Do not open that file again unless they ask; then use `show-me open <file> --reopen`.
 When you finish first, run `show-me end <file>`.
+`show-me export <file>` writes one file that opens without show-me, for sharing.
 
 ## Notes
 
