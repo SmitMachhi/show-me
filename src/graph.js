@@ -12,15 +12,16 @@
         ".showme-graph{position:relative;margin:0}.showme-graph svg{max-width:100%;height:auto;display:block}" +
         ".showme-btn{display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:8px;" +
         "background:#fff;color:#333;cursor:pointer;box-shadow:0 0 0 1px #0000001a,0 2px 6px #0000001a;" +
-        "transition:scale .12s cubic-bezier(.2,0,0,1),opacity .14s cubic-bezier(.2,0,0,1),background-color .14s}" +
+        "transition:scale .08s cubic-bezier(.22,1,.36,1),opacity .08s cubic-bezier(.22,1,.36,1),background-color .08s}" +
         ".showme-btn:hover{background:#f3f4f6}.showme-btn:active{scale:.96}" +
         ".showme-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}" +
         ".showme-graph>.showme-btn{position:absolute;top:8px;right:8px;opacity:0}" +
         ".showme-graph:hover>.showme-btn,.showme-btn:focus-visible{opacity:1}" +
         "@media(hover:none){.showme-graph>.showme-btn{opacity:1}}" +
         "dialog.showme-full{width:100vw;height:100vh;max-width:none;max-height:none;margin:0;border:0;padding:0;background:#fff}" +
-        "dialog.showme-full[open]{animation:showme-in .15s cubic-bezier(.2,0,0,1)}" +
+        "dialog.showme-full[open]{animation:showme-in .09s cubic-bezier(.22,1,.36,1)}" +
         "@keyframes showme-in{from{opacity:0;scale:.985}}" +
+        "dialog.showme-full.leaving{opacity:0;scale:.985;transition:opacity .07s cubic-bezier(.22,1,.36,1),scale .07s cubic-bezier(.22,1,.36,1)}" +
         "dialog.showme-full svg{width:100%;height:100%;cursor:grab;touch-action:none}" +
         "dialog.showme-full nav{position:absolute;top:12px;right:12px;display:flex;gap:6px}" +
         "@media(prefers-reduced-motion:reduce){dialog.showme-full[open]{animation:none}.showme-btn{transition:none}}";
@@ -62,7 +63,25 @@
             set();
         });
         addEventListener("pointerup", () => { from = null; });
-        return { zoom: (k) => zoom(k, 0.5, 0.5), fit: () => { [x, y, w, h] = home; set(); } };
+        // Button presses glide to the new view in 90 ms so you keep your place.
+        // Wheel and drag stay instant: they must follow the hand.
+        const glide = (to) => {
+            const start = [x, y, w, h];
+            const t0 = performance.now();
+            const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+            const step = (now) => {
+                const p = still ? 1 : Math.min(1, (now - t0) / 90);
+                const k = 1 - Math.pow(1 - p, 3);
+                [x, y, w, h] = start.map((v, i) => v + (to[i] - v) * k);
+                set();
+                if (p < 1) requestAnimationFrame(step);
+            };
+            requestAnimationFrame(step);
+        };
+        return {
+            zoom: (k) => glide([x + 0.5 * w * (1 - k), y + 0.5 * h * (1 - k), w * k, h * k]),
+            fit: () => glide(home),
+        };
     }
 
     function expand(svg) {
@@ -73,7 +92,12 @@
         copy.removeAttribute("width");
         copy.removeAttribute("height");
         full.append(copy, nav);
-        full.onclose = () => full.remove(); // Esc
+        // Leaves the way it came, a little faster.
+        const shut = () => {
+            full.classList.add("leaving");
+            setTimeout(() => full.remove(), 70);
+        };
+        full.oncancel = (e) => { e.preventDefault(); shut(); }; // Esc
         document.body.append(full);
         full.showModal();
         const view = panZoom(copy);
@@ -81,7 +105,7 @@
             button("plus", "Zoom in", () => view.zoom(0.8)),
             button("minus", "Zoom out", () => view.zoom(1.25)),
             button("fit", "Fit to window", view.fit),
-            button("close", "Close", () => full.remove()),
+            button("close", "Close", shut),
         );
     }
 

@@ -1,173 +1,176 @@
-// The review panel: queue notes, send them, and show what the agent did with them.
-// Unsent notes live in this tab's sessionStorage. Sent notes come back from the log.
+// The review panel: holds the unsent notes, sends them, and shows what the agent did.
+// Unsent notes and the draft live in this tab's sessionStorage. Sent notes, replies and
+// the ended state come back from the daemon's log.
+import { sentRow, queuedRow } from "/ui-view.js";
+import { initBar } from "/ui-bar.js";
+
 const key = location.pathname.split("/").pop();
 const el = (id) => document.getElementById(id);
 const page = el("page");
 const note = el("note");
-const store = "showme:" + key;
-const SVG = "http://www.w3.org/2000/svg";
-const AGENT = {
-    nobody: "No agent listens",
-    listening: "Agent listens",
-    working: "Agent works on your notes",
+const AGENT = { nobody: "No agent listens", listening: "Agent listens", working: "Agent works on your notes" };
+const saved = (name, fallback) => {
+    try { return JSON.parse(sessionStorage.getItem("showme:" + name + ":" + key)) ?? fallback; } catch (e) { return fallback; }
 };
-const RECEIPT = { "Not seen yet": "clock", Seen: "check", Done: "checks" };
+const save = (name, value) => {
+    try { sessionStorage.setItem("showme:" + name + ":" + key, JSON.stringify(value)); } catch (e) {}
+};
+const tell = (msg) => page.contentWindow.postMessage(Object.assign({ source: "showme-panel" }, msg), "*");
+
 let sent = [];
-let queue = [];
-let target = null;
-let shown = -1;
-try { queue = JSON.parse(sessionStorage.getItem(store)) || []; } catch (e) { queue = []; }
+let states = [];
+let queue = saved("queue", []);
+let file = "";
+let ended = false;
+let scrollY = saved("scroll", 0);
+let rowCount = -1;
+let replies = -1;
+let unseenReply = false;
 
-function icon(name) {
-    const svg = document.createElementNS(SVG, "svg");
-    const use = document.createElementNS(SVG, "use");
-    svg.setAttribute("class", "icon");
-    use.setAttribute("href", "#i-" + name);
-    svg.append(use);
-    return svg;
+const bar = initBar({
+    mode: setMode,
+    file: () => file,
+    reload: reloadPage,
+    end: () => send(true),
+});
+
+function setMode(on) {
+    bar.setMode(on);
+    save("mode", on);
+    tell({ type: "mode", on });
 }
 
-function kindIcon(n) {
-    if (n.node) return "graph";
-    if (n.kind === "text") return "text";
-    if (n.selector) return "pointer";
-    return n.kind === "page" ? "page" : "message";
-}
-
-function label(n) {
-    if (n.node) return n.node;
-    if (n.kind === "text") return "“" + n.text.slice(0, 80) + "”";
-    if (n.selector) return n.text ? n.text.slice(0, 60) : n.selector;
-    return n.kind === "page" ? "From the page" : "Message";
-}
-
-// One row: small head line (icon, where, receipt or remove), then the words.
-function row(cls, iconName, where, text, tail) {
-    const li = document.createElement("li");
-    const head = document.createElement("div");
-    const span = document.createElement("span");
-    const p = document.createElement("p");
-    li.className = cls;
-    head.className = "head";
-    span.textContent = where;
-    p.textContent = text;
-    head.append(icon(iconName), span);
-    if (tail) head.append(tail);
-    li.append(head, p);
-    return li;
-}
-
-function receipt(state) {
-    const em = document.createElement("em");
-    if (state === "Done") em.className = "done";
-    em.append(icon(RECEIPT[state]), state);
-    return em;
-}
-
-function removeButton(i) {
-    const b = document.createElement("button");
-    b.className = "plain";
-    b.setAttribute("aria-label", "Remove this note");
-    b.append(icon("x"));
-    b.onclick = () => { queue.splice(i, 1); render(); };
-    return b;
+function reloadPage() {
+    page.classList.add("loading");
+    page.src = "/a/" + key + "/?t=" + Date.now();
 }
 
 function render() {
-    try { sessionStorage.setItem(store, JSON.stringify(queue)); } catch (e) {}
+    save("queue", queue);
     const list = el("list");
-    const rows = sent.map((s) => s.agent
-        ? row("agent", "agent", "Agent", s.text)
-        : row("", kindIcon(s.note), label(s.note), s.note.note || "", receipt(s.state)));
-    queue.forEach((n, i) => rows.push(row("queued", kindIcon(n), label(n), n.note, removeButton(i))));
+    const rows = sent.map((s, i) => sentRow(s, states[i] !== undefined && states[i] !== s.state, reveal));
+    states = sent.map((s) => s.state);
+    queue.forEach((n, i) => rows.push(queuedRow(n, {
+        reveal,
+        remove: () => { queue.splice(i, 1); render(); },
+        save: (text) => { if (text) n.note = text; else queue.splice(i, 1); render(); },
+    })));
     // Rows that were not there at the last render slide in. The first render does not move.
-    if (shown >= 0) rows.slice(shown).forEach((r) => r.classList.add("enter"));
-    shown = rows.length;
+    const added = rowCount >= 0 && rows.length > rowCount;
+    if (rowCount >= 0) rows.slice(rowCount).forEach((r) => r.classList.add("enter"));
+    rowCount = rows.length;
     list.replaceChildren(...rows);
-    list.scrollTop = list.scrollHeight;
-    const chip = el("target");
-    chip.hidden = !target;
-    if (target) {
-        chip.querySelector("use").setAttribute("href", "#i-" + kindIcon(target));
-        chip.querySelector("span").textContent = label(target);
-    }
+    if (added) list.scrollTop = list.scrollHeight;
     el("count").textContent = queue.length || "";
-    el("send").disabled = queue.length === 0 && !note.value.trim();
+    const idle = queue.length === 0 && !note.value.trim();
+    el("send").disabled = ended || idle;
+    el("sendEnd").disabled = ended;
+    note.disabled = ended;
+    bar.setBadge(queue.length, unseenReply);
+    bar.setEnded(ended);
 }
 
-// The log is the record: notes, then acks from the agent's command, then replies.
+function reveal(selector) {
+    tell({ type: "reveal", selector });
+}
+
+// The log is the record: notes, acks from the agent's command, replies, end and start.
 async function loadLog() {
     const lines = (await (await fetch("/log/" + key)).text()).split("\n");
     const out = [];
+    let over = false;
     for (const line of lines) {
         let e;
         try { e = JSON.parse(line); } catch (err) { continue; }
-        if (e.t === "note") out.push({ note: e.data, state: "Not seen yet" });
         const notes = out.filter((s) => !s.agent);
+        if (e.t === "open") file = e.file;
+        if (e.t === "note") out.push({ note: e.data, state: "Not seen yet" });
         if (e.t === "ack") notes.slice(0, e.n).forEach((s) => { if (s.state === "Not seen yet") s.state = "Seen"; });
         if (e.t === "reply") {
             notes.forEach((s) => { if (s.state === "Seen") s.state = "Done"; });
             out.push({ agent: true, text: e.text });
         }
+        if (e.t === "end") over = true;
+        if (e.t === "start") over = false;
     }
+    const count = out.filter((s) => s.agent).length;
+    if (replies >= 0 && count > replies && document.body.classList.contains("collapsed")) unseenReply = true;
+    replies = count;
     sent = out;
+    ended = over;
     render();
 }
 
-function clearTarget() {
-    target = null;
-    page.contentWindow.postMessage({ source: "showme-panel", type: "clear" }, "*");
-}
-
-function add() {
+// Sends the queued notes, plus the composer text as one message. `andEnd` ends the review after.
+async function send(andEnd) {
     const text = note.value.trim();
-    if (!text) return;
-    queue.push(Object.assign({ kind: "message" }, target, { note: text }));
+    if (text) queue.push({ kind: "message", note: text });
     note.value = "";
-    clearTarget();
-    render();
-}
-
-async function send() {
-    add();
-    if (!queue.length) return;
+    save("draft", "");
     try {
-        const r = await fetch("/send/" + key, { method: "POST", body: JSON.stringify(queue) });
-        if (!r.ok) throw new Error(r.status);
-        el("status").textContent = "";
-        shown -= queue.length;
-        queue = [];
-        el("send").classList.add("sent");
-        setTimeout(() => el("send").classList.remove("sent"), 900);
+        if (queue.length) {
+            const r = await fetch("/send/" + key, { method: "POST", body: JSON.stringify(queue) });
+            if (!r.ok) throw new Error(r.status);
+            rowCount -= queue.length;
+            queue = [];
+            el("send").classList.add("sent");
+            setTimeout(() => el("send").classList.remove("sent"), 900);
+        }
+        if (andEnd) await fetch("/end/" + key, { method: "POST" });
+        showBanner("");
     } catch (e) {
-        el("status").textContent = "Not sent. Run show-me open again, then press Send.";
+        showBanner("Not sent. Run show-me open again, then press Send.");
     }
     render();
+}
+
+function showBanner(text) {
+    el("banner").textContent = text;
+    el("banner").hidden = !text;
 }
 
 addEventListener("message", (e) => {
     const m = e.data;
     if (e.source !== page.contentWindow || !m || m.source !== "showme") return;
-    if (m.type === "pick") {
-        target = { kind: m.kind, selector: m.selector, text: m.text, node: m.node };
-        note.focus();
+    if (m.type === "ready") {
+        bar.setTitle(m.title);
+        setMode(saved("mode", m.annotate));
+        tell({ type: "restore", y: scrollY });
+    } else if (m.type === "scroll") {
+        save("scroll", scrollY = m.y);
+    } else if (m.type === "toggleMode") {
+        setMode(!bar.isAnnotate());
     } else if (m.type === "note") {
-        queue.push({ kind: "page", note: m.note, data: m.data });
+        const { type, source, sendNow, ...n } = m;
+        queue.push(n);
+        if (sendNow) return send(false);
+        render();
     }
-    render();
 });
 
-el("form").onsubmit = (e) => { e.preventDefault(); add(); };
-el("send").onclick = send;
-el("clear").onclick = () => { clearTarget(); render(); };
-note.oninput = render;
+el("form").onsubmit = (e) => { e.preventDefault(); send(false); };
+el("sendEnd").onclick = () => send(true);
+el("toggle").addEventListener("click", () => { unseenReply = false; render(); });
+page.onload = () => page.classList.remove("loading");
+note.value = saved("draft", "");
+note.oninput = () => { save("draft", note.value); render(); };
 note.onkeydown = (e) => {
-    if (e.key !== "Enter" || e.shiftKey) return;
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
     e.preventDefault();
-    if (e.ctrlKey || e.metaKey) send(); else add();
+    send(false);
 };
-new EventSource("/events/" + key).onmessage = (e) => {
-    if (e.data === "reload") page.src = "/a/" + key + "/?t=" + Date.now();
+
+// When the daemon goes away, say so. When it comes back it may be a newer build, so reload.
+const stream = new EventSource("/events/" + key);
+let lost = null;
+stream.onerror = () => {
+    lost = lost || setTimeout(() => showBanner("show-me stopped. Run show-me open again."), 3000);
+};
+stream.onopen = () => {
+    if (lost) location.reload();
+};
+stream.onmessage = (e) => {
+    if (e.data === "reload") reloadPage();
     if (e.data === "log") loadLog();
     if (!e.data.startsWith("presence ")) return;
     el("agent").dataset.state = e.data.slice(9);
