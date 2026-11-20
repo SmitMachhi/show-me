@@ -11,7 +11,9 @@ const Io = std.Io;
 const usage =
     \\usage:
     \\  show-me open <file.html>   show the page for review, return at once
-    \\  show-me wait <file.html>   block until the reviewer sends notes, print them
+    \\  show-me wait <file.html> [--reply "text"]   show the reply, then block until
+    \\                             the reviewer sends notes, and print them
+    \\  show-me reply <file.html> "text"   show one reply to the reviewer
     \\  show-me stop               end the background daemon
     \\  show-me --version
     \\
@@ -24,6 +26,7 @@ pub fn main(init: std.process.Init) !void {
     if (std.mem.eql(u8, cmd, "serve")) return daemon.serve(init);
     if (std.mem.eql(u8, cmd, "open")) return open(init, args);
     if (std.mem.eql(u8, cmd, "wait")) return wait(init, args);
+    if (std.mem.eql(u8, cmd, "reply")) return reply(init, args);
     if (std.mem.eql(u8, cmd, "stop")) return stop(init);
     if (std.mem.eql(u8, cmd, "--version")) return say(io, state.version ++ "\n");
     std.debug.print("{s}", .{usage});
@@ -74,21 +77,51 @@ fn browse(io: Io, url: []const u8) void {
     }) catch std.debug.print("show-me: could not open the browser. Open the address below by hand.\n", .{});
 }
 
+const Review = struct { port: u16, key: reviews.Key };
+
+// For commands that need one review that is already open.
+fn openReview(init: std.process.Init, args: []const []const u8, cmd: []const u8) Review {
+    const arena = init.arena.allocator();
+    const path = realFile(init, args, cmd);
+    const d = state.dir(init.io, arena, init.environ_map);
+    const info = if (client.running(init.io, d)) state.readInfo(init.io, arena, d) else null;
+    const port = (info orelse state.fail("no review is open. Run: show-me open {s}", .{args[2]})).port;
+    return .{ .port = port, .key = reviews.keyOf(path) };
+}
+
+fn sendReply(init: std.process.Init, r: Review, args: []const []const u8, text: []const u8) void {
+    if (std.mem.trim(u8, text, " \r\n\t").len == 0) state.fail("the reply is empty. Give the reply text.", .{});
+    const res = client.call(init.io, init.arena.allocator(), r.port, "POST", "/reply/" ++ r.key, text) catch |e|
+        state.fail("the daemon did not answer: {t}. Run: show-me open {s}", .{ e, args[2] });
+    if (res.status != 200) state.fail("no review is open for this file. Run: show-me open {s}", .{args[2]});
+}
+
+fn reply(init: std.process.Init, args: []const []const u8) void {
+    if (args.len < 4) state.fail("reply needs the text. Example: show-me reply plan.html \"Title is shorter now.\"", .{});
+    sendReply(init, openReview(init, args, "reply"), args, args[3]);
+    say(init.io, "sent\n");
+}
+
 fn wait(init: std.process.Init, args: []const []const u8) void {
     const io = init.io;
     const arena = init.arena.allocator();
-    const path = realFile(init, args, "wait");
-    const d = state.dir(io, arena, init.environ_map);
-    const info = if (client.running(io, d)) state.readInfo(io, arena, d) else null;
-    const port = (info orelse state.fail("no review is open. Run: show-me open {s}", .{args[2]})).port;
-    const key = reviews.keyOf(path);
-    const res = client.call(io, arena, port, "GET", "/wait/" ++ key, "") catch |e|
+    const r = openReview(init, args, "wait");
+    if (args.len > 3) {
+        if (args.len < 5 or !std.mem.eql(u8, args[3], "--reply")) {
+            state.fail("unknown option '{s}'. Use: show-me wait <file.html> --reply \"text\"", .{args[3]});
+        }
+        sendReply(init, r, args, args[4]);
+    }
+    const res = client.call(io, arena, r.port, "GET", "/wait/" ++ r.key, "") catch |e|
         state.fail("lost the daemon while waiting: {t}. Run the same wait again. No notes are lost.", .{e});
     if (res.status != 200) state.fail("no review is open for this file. Run: show-me open {s}", .{args[2]});
-    const split = std.mem.findScalar(u8, res.body, '\n') orelse res.body.len;
-    say(io, res.body[@min(split + 1, res.body.len)..]);
+    // The daemon sends one space every two seconds while it waits. The notes follow.
+    const body = std.mem.trimStart(u8, res.body, " ");
+    const split = std.mem.findScalar(u8, body, '\n') orelse
+        state.fail("the daemon stopped while waiting. Run the same wait again. No notes are lost.", .{});
+    say(io, body[split + 1 ..]);
     // Ack only after the notes are printed. A crash before this line redelivers them.
-    _ = client.call(io, arena, port, "POST", "/ack/" ++ key, res.body[0..split]) catch {};
+    _ = client.call(io, arena, r.port, "POST", "/ack/" ++ r.key, body[0..split]) catch {};
 }
 
 fn stop(init: std.process.Init) void {

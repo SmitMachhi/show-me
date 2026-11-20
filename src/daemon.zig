@@ -5,6 +5,7 @@ const builtin = @import("builtin");
 const state = @import("state.zig");
 const reviews = @import("reviews.zig");
 const pages = @import("pages.zig");
+const presence = @import("presence.zig");
 const Io = std.Io;
 const net = Io.net;
 const Request = std.http.Server.Request;
@@ -75,7 +76,7 @@ fn route(sh: *reviews.Shared, req: *Request, port: u16, arena: std.mem.Allocator
     if (method == .POST and std.mem.eql(u8, path, "/reviews")) {
         const key = reviews.register(sh, arena, body) catch return reply(req, .bad_request, "bad path\n");
         // Key, then how many browser tabs already show this review.
-        return reply(req, .ok, try std.fmt.allocPrint(arena, "{s} {d}", .{ key, reviews.tabCount(sh, key) }));
+        return reply(req, .ok, try std.fmt.allocPrint(arena, "{s} {d}", .{ key, presence.count(sh, &sh.tabs, key) }));
     }
     return routeReview(sh, req, arena, method, path, body);
 }
@@ -94,26 +95,53 @@ fn routeReview(
     const rest = path[slash + 1 ..];
     const key = reviews.parseKey(rest[0..@min(rest.len, 16)]) orelse return reply(req, .not_found, "not found\n");
     if (!reviews.exists(sh, key)) return reply(req, .not_found, "no such review\n");
-    if (method == .GET and std.mem.eql(u8, action, "a")) {
+    const is = struct {
+        fn is(a: []const u8, b: []const u8) bool {
+            return std.mem.eql(u8, a, b);
+        }
+    }.is;
+    if (method == .GET and is(action, "a")) {
         return pages.artifact(sh, req, arena, key, std.mem.trimStart(u8, rest[16..], "/"));
     }
     if (rest.len != 16) return reply(req, .not_found, "not found\n");
-    if (method == .GET and std.mem.eql(u8, action, "r")) return pages.page(req);
-    if (method == .GET and std.mem.eql(u8, action, "events")) return pages.events(sh, req, arena, key);
-    if (method == .GET and std.mem.eql(u8, action, "wait")) {
-        return reply(req, .ok, try reviews.wait(sh, arena, key));
-    }
-    if (method == .POST and std.mem.eql(u8, action, "send")) {
+    if (method == .GET) {
+        if (is(action, "r")) return pages.page(req);
+        if (is(action, "events")) return pages.events(sh, req, arena, key);
+        if (is(action, "log")) return reply(req, .ok, try reviews.readLog(sh, arena, key));
+        if (is(action, "wait")) return wait(sh, req, arena, key);
+    } else if (is(action, "send")) {
         reviews.send(sh, arena, key, body) catch return reply(req, .bad_request, "body must be JSON\n");
         return reply(req, .ok, "ok\n");
-    }
-    if (method == .POST and std.mem.eql(u8, action, "ack")) {
+    } else if (is(action, "reply")) {
+        try reviews.reply(sh, arena, key, body);
+        return reply(req, .ok, "ok\n");
+    } else if (is(action, "ack")) {
         const n = std.fmt.parseInt(usize, std.mem.trim(u8, body, " \r\n"), 10) catch
             return reply(req, .bad_request, "body must be a number\n");
         try reviews.ack(sh, arena, key, n);
         return reply(req, .ok, "ok\n");
     }
     return reply(req, .not_found, "not found\n");
+}
+
+// Holds the agent's request open until notes exist. One space goes out every two
+// seconds: when that write fails the agent's command is gone, and the reviewer stops
+// being told that one agent listens.
+fn wait(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key: reviews.Key) !void {
+    var buf: [64]u8 = undefined;
+    var body = try req.respondStreaming(&buf, .{
+        .respond_options = .{ .keep_alive = false, .transfer_encoding = .none },
+    });
+    const slot = presence.join(sh, &sh.waiters, key);
+    defer presence.leave(sh, &sh.waiters, slot);
+    var seen_size: u64 = std.math.maxInt(u64);
+    while (true) {
+        const notes = try reviews.waitBeat(sh, arena, key, &seen_size);
+        try body.writer.writeAll(notes orelse " ");
+        try body.writer.flush();
+        try body.flush();
+        if (notes != null) return;
+    }
 }
 
 // DNS-rebinding and cross-site guard: Host must name this server, and a request that

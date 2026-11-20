@@ -1,60 +1,27 @@
 // One review = one HTML file = one append-only log, <key>.jsonl, in the state folder.
-// Lines: {"t":"open","file":..} then {"t":"note","data":..} and {"t":"ack","n":N}.
-// Notes past the last ack are undelivered. A reader that dies before its ack gets
-// them again, so delivery is at-least-once and nothing is lost.
-// Limits: `wait` rereads the whole log, and all reviews share one wake-up signal.
+// Lines: {"t":"open","file":..}, {"t":"note","data":..}, {"t":"ack","n":N},
+// {"t":"reply","text":..}. Notes past the last ack are undelivered. A reader that dies
+// before its ack gets them again, so delivery is at-least-once and nothing is lost.
+// Limits: one changed log is reread whole, and all reviews share one wake-up signal.
 const std = @import("std");
+const presence = @import("presence.zig");
 const Io = std.Io;
 
 pub const Key = [16]u8;
 pub const max_note_bytes = 256 * 1024;
 const max_log_bytes = 64 * 1024 * 1024;
 const note_prefix = "{\"t\":\"note\",\"data\":";
-const ack_prefix = "{\"t\":\"ack\",\"n\":";
+pub const ack_prefix = "{\"t\":\"ack\",\"n\":";
+pub const reply_prefix = "{\"t\":\"reply\",\"text\":";
 
 pub const Shared = struct {
     io: Io,
     dir: Io.Dir,
     mutex: Io.Mutex = .init,
     changed: Io.Condition = .init,
-    // One slot per open browser tab. A full table only makes `open` launch one more tab.
-    tabs: [32]?Key = @splat(null),
+    tabs: presence.Table = @splat(null),
+    waiters: presence.Table = @splat(null),
 };
-
-pub fn tabOpen(sh: *Shared, key: Key) ?usize {
-    sh.mutex.lockUncancelable(sh.io);
-    defer sh.mutex.unlock(sh.io);
-    for (&sh.tabs, 0..) |*slot, i| {
-        if (slot.* != null) continue;
-        slot.* = key;
-        return i;
-    }
-    return null;
-}
-
-pub fn tabClose(sh: *Shared, slot: ?usize) void {
-    sh.mutex.lockUncancelable(sh.io);
-    defer sh.mutex.unlock(sh.io);
-    if (slot) |i| sh.tabs[i] = null;
-}
-
-pub fn tabCount(sh: *Shared, key: Key) usize {
-    sh.mutex.lockUncancelable(sh.io);
-    defer sh.mutex.unlock(sh.io);
-    var n: usize = 0;
-    for (sh.tabs) |slot| {
-        if (slot) |k| n += @intFromBool(std.mem.eql(u8, &k, &key));
-    }
-    return n;
-}
-
-// The reviewed file's real path, read back from the first log line.
-pub fn fileOf(sh: *Shared, arena: std.mem.Allocator, key: Key) ![]const u8 {
-    const text = try sh.dir.readFileAlloc(sh.io, &logName(key), arena, .limited(max_log_bytes));
-    const line = text[0 .. std.mem.findScalar(u8, text, '\n') orelse text.len];
-    const head = try std.json.parseFromSliceLeaky(struct { file: []const u8 }, arena, line, .{ .ignore_unknown_fields = true });
-    return head.file;
-}
 
 // The key is derived from the real path, so it is an address, not a secret.
 pub fn keyOf(real_path: []const u8) Key {
@@ -77,25 +44,40 @@ fn logName(key: Key) [22]u8 {
 }
 
 pub fn exists(sh: *Shared, key: Key) bool {
-    sh.dir.access(sh.io, &logName(key), .{}) catch return false;
-    return true;
+    return logSize(sh, key) != null;
+}
+
+pub fn logSize(sh: *Shared, key: Key) ?u64 {
+    const stat = sh.dir.statFile(sh.io, &logName(key), .{}) catch return null;
+    return stat.size;
+}
+
+pub fn readLog(sh: *Shared, arena: std.mem.Allocator, key: Key) ![]const u8 {
+    return sh.dir.readFileAlloc(sh.io, &logName(key), arena, .limited(max_log_bytes));
+}
+
+// The reviewed file's real path, read back from the first log line.
+pub fn fileOf(sh: *Shared, arena: std.mem.Allocator, key: Key) ![]const u8 {
+    const text = try readLog(sh, arena, key);
+    const line = text[0 .. std.mem.findScalar(u8, text, '\n') orelse text.len];
+    const Head = struct { file: []const u8 };
+    return (try std.json.parseFromSliceLeaky(Head, arena, line, .{ .ignore_unknown_fields = true })).file;
 }
 
 pub fn register(sh: *Shared, arena: std.mem.Allocator, real_path: []const u8) !Key {
     const key = keyOf(real_path);
     if (exists(sh, key)) return key;
     const file = try std.json.Stringify.valueAlloc(arena, real_path, .{});
-    const line = try std.fmt.allocPrint(arena, "{{\"t\":\"open\",\"file\":{s}}}\n", .{file});
-    try append(sh, key, line);
+    try append(sh, key, try std.fmt.allocPrint(arena, "{{\"t\":\"open\",\"file\":{s}}}\n", .{file}));
     return key;
 }
 
-fn append(sh: *Shared, key: Key, line: []const u8) !void {
+fn append(sh: *Shared, key: Key, lines: []const u8) !void {
     sh.mutex.lockUncancelable(sh.io);
     defer sh.mutex.unlock(sh.io);
     const f = try sh.dir.createFile(sh.io, &logName(key), .{ .truncate = false });
     defer f.close(sh.io);
-    try f.writePositionalAll(sh.io, line, try f.length(sh.io));
+    try f.writePositionalAll(sh.io, lines, try f.length(sh.io));
 }
 
 // The body comes from a browser. Reparse it so each log line is one valid JSON line.
@@ -116,15 +98,25 @@ pub fn ack(sh: *Shared, arena: std.mem.Allocator, key: Key, n: usize) !void {
     try append(sh, key, try std.fmt.allocPrint(arena, "{s}{d}}}\n", .{ ack_prefix, n }));
 }
 
-// Blocks until notes exist past the last ack. Returns "<total>\n" then one note per line.
-pub fn wait(sh: *Shared, arena: std.mem.Allocator, key: Key) ![]const u8 {
+pub fn reply(sh: *Shared, arena: std.mem.Allocator, key: Key, text: []const u8) !void {
+    const json = try std.json.Stringify.valueAlloc(arena, text, .{});
+    try append(sh, key, try std.fmt.allocPrint(arena, "{s}{s}}}\n", .{ reply_prefix, json }));
+}
+
+// Returns "<total>\n" then one undelivered note per line. Returns null after two seconds
+// with none, so the caller can check that the agent's command is still there, then call
+// again. `seen_size` skips the reread while the log has not grown.
+pub fn waitBeat(sh: *Shared, arena: std.mem.Allocator, key: Key, seen_size: *u64) !?[]const u8 {
     sh.mutex.lockUncancelable(sh.io);
     defer sh.mutex.unlock(sh.io);
-    while (true) {
-        const text = try sh.dir.readFileAlloc(sh.io, &logName(key), arena, .limited(max_log_bytes));
-        if (try pending(arena, text)) |out| return out;
-        sh.changed.waitUncancelable(sh.io, &sh.mutex);
+    const size = logSize(sh, key) orelse return error.FileNotFound;
+    if (size != seen_size.*) {
+        seen_size.* = size;
+        if (try pending(arena, try readLog(sh, arena, key))) |out| return out;
     }
+    const beat: Io.Timeout = .{ .duration = .{ .raw = .{ .nanoseconds = 2 * std.time.ns_per_s }, .clock = .awake } };
+    sh.changed.waitTimeout(sh.io, &sh.mutex, beat) catch {};
+    return null;
 }
 
 fn pending(arena: std.mem.Allocator, log: []const u8) !?[]const u8 {

@@ -9,8 +9,9 @@
     body { margin: 0; display: flex; height: 100vh; font: 14px/1.4 system-ui, sans-serif; }
     iframe { flex: 1; border: 0; min-width: 0; background: #fff; }
     aside { width: 340px; display: flex; flex-direction: column; border-left: 1px solid #8884; }
-    #list { flex: 1; overflow: auto; margin: 0; padding: 8px 12px; list-style: none; }
-    #list li { padding: 8px 0; border-bottom: 1px solid #8883; overflow-wrap: anywhere; }
+    #agent { margin: 0; padding: 8px 12px; border-bottom: 1px solid #8884; }
+    #list { flex: 1; overflow: auto; margin: 0; padding: 0 12px; list-style: none; }
+    #list li { padding: 8px 0; border-bottom: 1px solid #8883; overflow-wrap: anywhere; white-space: pre-wrap; }
     #list small { display: block; opacity: 0.7; }
     #list button { float: right; }
     form { padding: 12px; border-top: 1px solid #8884; }
@@ -26,6 +27,7 @@
 </style>
 <iframe id="page" title="Page under review" sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
 <aside>
+    <p id="agent" role="status"></p>
     <ul id="list"></ul>
     <form id="form">
         <p id="target"></p>
@@ -39,9 +41,16 @@
 </aside>
 <script>
 const key = location.pathname.split("/").pop();
-const page = document.getElementById("page");
-const note = document.getElementById("note");
+const el = (id) => document.getElementById(id);
+const page = el("page");
+const note = el("note");
 const store = "showme:" + key;
+const AGENT = {
+    nobody: "No agent listens. Your notes wait.",
+    listening: "Agent listens.",
+    working: "Agent works on your notes.",
+};
+let sent = [];
 let queue = [];
 let target = null;
 try { queue = JSON.parse(sessionStorage.getItem(store)) || []; } catch (e) { queue = []; }
@@ -53,45 +62,73 @@ function label(n) {
     return n.kind === "page" ? "From the page" : "Message";
 }
 
-function render() {
-    try { sessionStorage.setItem(store, JSON.stringify(queue)); } catch (e) {}
-    const list = document.getElementById("list");
-    list.textContent = "";
-    queue.forEach((n, i) => {
-        const li = document.createElement("li");
+function row(top, text, onRemove) {
+    const li = document.createElement("li");
+    const where = document.createElement("small");
+    where.textContent = top;
+    if (onRemove) {
         const remove = document.createElement("button");
         remove.textContent = "Remove";
-        remove.onclick = () => { queue.splice(i, 1); render(); };
-        const where = document.createElement("small");
-        where.textContent = label(n);
-        li.append(remove, where, n.note);
-        list.append(li);
+        remove.onclick = onRemove;
+        li.append(remove);
+    }
+    li.append(where, text);
+    return li;
+}
+
+function render() {
+    try { sessionStorage.setItem(store, JSON.stringify(queue)); } catch (e) {}
+    const list = el("list");
+    list.textContent = "";
+    for (const s of sent) {
+        list.append(s.agent ? row("Agent", s.text) : row(label(s.note) + " · " + s.state, s.note.note || ""));
+    }
+    queue.forEach((n, i) => {
+        list.append(row(label(n) + " · Not sent", n.note, () => { queue.splice(i, 1); render(); }));
     });
-    document.getElementById("target").textContent = target ? "On: " + label(target) : "";
-    document.getElementById("send").disabled = queue.length === 0;
+    list.scrollTop = list.scrollHeight;
+    el("target").textContent = target ? "On: " + label(target) : "";
+    el("send").disabled = queue.length === 0 && !note.value.trim();
+}
+
+// The log is the record: notes, then acks from the agent's command, then replies.
+async function loadLog() {
+    const lines = (await (await fetch("/log/" + key)).text()).split("\n");
+    const out = [];
+    for (const line of lines) {
+        let e;
+        try { e = JSON.parse(line); } catch (err) { continue; }
+        if (e.t === "note") out.push({ note: e.data, state: "Not seen yet" });
+        const notes = out.filter((s) => !s.agent);
+        if (e.t === "ack") notes.slice(0, e.n).forEach((s) => { if (s.state === "Not seen yet") s.state = "Seen"; });
+        if (e.t === "reply") {
+            notes.forEach((s) => { if (s.state === "Seen") s.state = "Done"; });
+            out.push({ agent: true, text: e.text });
+        }
+    }
+    sent = out;
+    render();
 }
 
 function add() {
     const text = note.value.trim();
-    if (!text) return false;
+    if (!text) return;
     queue.push(Object.assign({ kind: "message" }, target, { note: text }));
     note.value = "";
     target = null;
     render();
-    return true;
 }
 
 async function send() {
     add();
     if (!queue.length) return;
-    const status = document.getElementById("status");
     try {
         const r = await fetch("/send/" + key, { method: "POST", body: JSON.stringify(queue) });
         if (!r.ok) throw new Error(r.status);
-        status.textContent = "Sent " + queue.length + ".";
+        el("status").textContent = "";
         queue = [];
     } catch (e) {
-        status.textContent = "Not sent. Run show-me open again, then press Send.";
+        el("status").textContent = "Not sent. Run show-me open again, then press Send.";
     }
     render();
 }
@@ -108,15 +145,20 @@ addEventListener("message", (e) => {
     render();
 });
 
-document.getElementById("form").onsubmit = (e) => { e.preventDefault(); add(); };
-document.getElementById("send").onclick = send;
+el("form").onsubmit = (e) => { e.preventDefault(); add(); };
+el("send").onclick = send;
+note.oninput = render;
 note.onkeydown = (e) => {
     if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
     if (e.ctrlKey || e.metaKey) send(); else add();
 };
-new EventSource("/events/" + key).onmessage = () => { page.src = "/a/" + key + "/?t=" + Date.now(); };
+new EventSource("/events/" + key).onmessage = (e) => {
+    if (e.data === "reload") page.src = "/a/" + key + "/?t=" + Date.now();
+    if (e.data === "log") loadLog();
+    if (e.data.startsWith("presence ")) el("agent").textContent = AGENT[e.data.slice(9)] || "";
+};
 page.src = "/a/" + key + "/";
-render();
+loadLog();
 </script>
 </html>
