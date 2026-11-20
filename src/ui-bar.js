@@ -33,6 +33,7 @@ export function initBar(on) {
         setTimeout(() => { text.textContent = "Copy file path"; openMenu(false); }, 700);
     };
     el("reload").onclick = () => { openMenu(false); on.reload(); };
+    el("export").onclick = () => { openMenu(false); on.download(); };
     el("end").onclick = () => { openMenu(false); on.end(); };
 
     addEventListener("mousedown", (e) => {

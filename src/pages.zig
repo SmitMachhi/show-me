@@ -5,6 +5,7 @@ const std = @import("std");
 const reviews = @import("reviews.zig");
 const presence = @import("presence.zig");
 const graphs = @import("graphs.zig");
+const exporter = @import("export.zig");
 const Io = std.Io;
 const Request = std.http.Server.Request;
 const Header = std.http.Header;
@@ -48,7 +49,7 @@ pub fn asset(req: *Request, path: []const u8) !bool {
     return false;
 }
 
-fn mime(path: []const u8) []const u8 {
+pub fn mime(path: []const u8) []const u8 {
     const types = [_][2][]const u8{
         .{ ".html", "text/html; charset=utf-8" }, .{ ".htm", "text/html; charset=utf-8" },
         .{ ".css", "text/css" },                  .{ ".js", "text/javascript" },
@@ -80,7 +81,7 @@ pub fn artifact(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, ke
 }
 
 // Resolves a sibling file. Returns null unless its real path is inside the reviewed file's folder.
-fn confine(io: Io, arena: std.mem.Allocator, file: []const u8, sub: []const u8) !?[]const u8 {
+pub fn confine(io: Io, arena: std.mem.Allocator, file: []const u8, sub: []const u8) !?[]const u8 {
     const root = std.fs.path.dirname(file) orelse return null;
     const rel = std.Uri.percentDecodeInPlace(try arena.dupe(u8, sub));
     if (std.mem.findAny(u8, rel, "\\:") != null or std.mem.find(u8, rel, "..") != null) return null;
@@ -144,4 +145,17 @@ pub fn events(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key:
         if (tick % 25 == 24) try out.writeAll(": ping\n\n");
         last = next;
     }
+}
+
+// The standalone copy of the reviewed page, sent as one file to save.
+pub fn download(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key: reviews.Key) !void {
+    const file = try reviews.fileOf(sh, arena, key);
+    const source = try Io.Dir.cwd().readFileAlloc(sh.io, file, arena, .limited(max_file_bytes));
+    const body = try exporter.page(.{ .io = sh.io, .dir = sh.dir, .env = sh.env }, arena, file, source);
+    const name = std.fs.path.stem(file);
+    const disposition = try std.fmt.allocPrint(arena, "attachment; filename=\"{s}.export.html\"", .{name});
+    return respond(req, .ok, body, &.{
+        .{ .name = "content-type", .value = "text/html; charset=utf-8" },
+        .{ .name = "content-disposition", .value = disposition },
+    });
 }

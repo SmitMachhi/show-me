@@ -33,6 +33,7 @@ const bar = initBar({
     mode: setMode,
     file: () => file,
     reload: reloadPage,
+    download: () => { location.href = "/export/" + key; },
     end: () => send(true),
 });
 

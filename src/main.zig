@@ -8,6 +8,7 @@ const client = @import("client.zig");
 const agent = @import("agent.zig");
 const graphs = @import("graphs.zig");
 const lint = @import("lint.zig");
+const exporter = @import("export.zig");
 const Io = std.Io;
 
 const usage =
@@ -19,6 +20,8 @@ const usage =
     \\  show-me reply <file.html> "text"   show one reply to the reviewer
     \\  show-me end <file.html>    end the review
     \\  show-me check <file.html>  check diagrams and writing rules, report each problem
+    \\  show-me export <file.html> [--out <path>]
+    \\                             write one file that opens without show-me
     \\  show-me stop               end the background daemon
     \\  show-me --version
     \\
@@ -33,6 +36,7 @@ pub fn main(init: std.process.Init) !void {
     if (std.mem.eql(u8, cmd, "reply")) return agent.reply(init, args);
     if (std.mem.eql(u8, cmd, "end")) return agent.end(init, args);
     if (std.mem.eql(u8, cmd, "check")) return check(init, args);
+    if (std.mem.eql(u8, cmd, "export")) return exportPage(init, args);
     if (std.mem.eql(u8, cmd, "stop")) return stop(init);
     if (std.mem.eql(u8, cmd, "--version")) return agent.say(init.io, state.version ++ "\n");
     std.debug.print("{s}", .{usage});
@@ -68,6 +72,24 @@ fn checkPage(init: std.process.Init, path: []const u8) void {
 fn check(init: std.process.Init, args: []const []const u8) void {
     checkPage(init, agent.realFile(init, args, "check"));
     agent.say(init.io, "ok\n");
+}
+
+// Writes one file that opens without show-me. Default name: plan.html -> plan.export.html.
+fn exportPage(init: std.process.Init, args: []const []const u8) void {
+    const io = init.io;
+    const arena = init.arena.allocator();
+    const path = agent.realFile(init, args, "export");
+    checkPage(init, path);
+    const html = Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(64 * 1024 * 1024)) catch |e|
+        state.fail("cannot read '{s}': {t}", .{ path, e });
+    const ctx: graphs.Ctx = .{ .io = io, .dir = state.dir(io, arena, init.environ_map), .env = init.environ_map };
+    const out = exporter.page(ctx, arena, path, html) catch |e| state.fail("cannot export: {t}", .{e});
+    const custom = args.len > 4 and std.mem.eql(u8, args[3], "--out");
+    const stem = path[0 .. path.len - std.fs.path.extension(path).len];
+    const dest = if (custom) args[4] else std.fmt.allocPrint(arena, "{s}.export.html", .{stem}) catch return;
+    Io.Dir.cwd().writeFile(io, .{ .sub_path = dest, .data = out }) catch |e|
+        state.fail("cannot write '{s}': {t}", .{ dest, e });
+    agent.say(io, std.fmt.allocPrint(arena, "{s}\n", .{dest}) catch return);
 }
 
 fn open(init: std.process.Init, args: []const []const u8) void {
