@@ -17,9 +17,14 @@ export function initBar(on) {
         el("mode").setAttribute("aria-checked", String(next));
     }
 
+    // On one narrow screen the chat is a sheet over the page, closed until asked for.
+    const narrow = matchMedia("(max-width: 760px)");
+
     function setPanel(open) {
         document.body.classList.toggle("collapsed", !open);
         el("toggle").setAttribute("aria-label", open ? "Hide chat" : "Show chat");
+        el("toggle").title = open ? "Hide chat" : "Show chat";
+        if (narrow.matches) return;
         try { localStorage.setItem("showme:panel", open ? "open" : "closed"); } catch (e) {}
     }
 
@@ -49,7 +54,11 @@ export function initBar(on) {
 
     let stored = "open";
     try { stored = localStorage.getItem("showme:panel") || "open"; } catch (e) {}
-    setPanel(stored === "open");
+    setPanel(stored === "open" && !narrow.matches);
+    // A tap on the dimmed page closes the sheet.
+    el("page").parentNode.onclick = (e) => {
+        if (narrow.matches && e.target === e.currentTarget) setPanel(false);
+    };
 
     return {
         setMode,

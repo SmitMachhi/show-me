@@ -115,12 +115,17 @@ textarea { display: block; flex: 1; min-width: 0; padding: 6px 4px; border: 0; o
 .send .done, .send.sent .go { opacity: 0; scale: 0.5; }
 .send.sent .done { opacity: 1; scale: 1; }
 
+/* Narrow screens: the page fills the screen and the chat is one sheet that slides up over it. */
 @media (max-width: 760px) {
-    main { flex-direction: column; }
-    aside { width: auto; height: 46vh; box-shadow: 0 -1px 0 var(--line); }
+    aside { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; width: auto; height: 72vh; border-radius: 16px 16px 0 0; background: var(--panel); box-shadow: var(--pop); transition: translate 0.1s var(--ease); }
+    .collapsed aside { display: flex; translate: 0 100%; box-shadow: none; }
+    main::after { content: ""; position: fixed; inset: 44px 0 0; z-index: 1; background: rgb(0 0 0 / 0.35); transition: opacity 0.1s var(--ease); }
+    .collapsed main::after { opacity: 0; pointer-events: none; }
     .presence span, #title { display: none; }
+    .switch { font-size: 0; gap: 0; }
+    header strong { flex: 1; }
 }
-/* Reduced motion keeps the fades and drops everything that moves. */
+/* Reduced motion: every change is instant. */
 @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation-duration: 0.01s !important; scale: none !important; translate: none !important; }
+    *, *::before, *::after { animation-duration: 0.01s !important; transition-duration: 0.01s !important; }
 }
