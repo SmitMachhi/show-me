@@ -13,3 +13,4 @@ design/*.png
 design/*.svg
 zig-out/
 .zig-cache/
+.show-me/
