@@ -44,6 +44,7 @@ pub fn main(init: std.process.Init) !void {
     if (std.mem.eql(u8, cmd, "setup")) return setup.run(init, args);
     if (std.mem.eql(u8, cmd, "stop")) return stop(init);
     if (std.mem.eql(u8, cmd, "--version")) return agent.say(init.io, state.version ++ "\n");
+    if (std.mem.eql(u8, cmd, "--help")) return agent.say(init.io, usage);
     std.debug.print("{s}", .{usage});
     std.process.exit(2);
 }
