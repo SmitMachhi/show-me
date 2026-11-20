@@ -11,3 +11,5 @@ bench/rust/zigcc.bat
 bench/spike/
 design/*.png
 design/*.svg
+zig-out/
+.zig-cache/
