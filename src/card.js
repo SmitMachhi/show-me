@@ -20,6 +20,7 @@
         "transition:scale .08s cubic-bezier(.22,1,.36,1),background-color .08s}" +
         "button:hover{background:#0000000f}button:active{scale:.96}" +
         "button.go{background:#3657d6;color:#fff}button.go:hover{background:#2f4cc0}" +
+        ".pics{display:flex;gap:6px;padding:0 6px}.pics:empty{display:none}.pics img{width:40px;height:40px;object-fit:cover;border-radius:8px}" +
         "@media(prefers-color-scheme:dark){.box{background:#1f1f1f;color:#ededeb;" +
         "box-shadow:0 0 0 1px #ffffff26,0 12px 32px #00000080}.where,small,button{color:#9b9b96}" +
         "button:hover{background:#ffffff14}button.go{background:#8ea2ff;color:#10142b}}" +
@@ -27,11 +28,14 @@
 
     let host = null;
     let area = null;
+    let pics = [];
+    let strip = null;
 
     function close() {
         if (host) host.remove();
         host = null;
         area = null;
+        pics = [];
     }
 
     // Places the card under the target, or above it when there is no room below.
@@ -41,28 +45,38 @@
         host.style.left = scrollX + Math.max(8, Math.min(rect.left, innerWidth - 308)) + "px";
     }
 
-    function open(target, onQueue) {
+    // `onQueue(words, sendNow, pictureIds)` runs when the reviewer queues the note.
+    // `onImage(file)` runs for each pasted picture; the panel uploads it, then calls addImage.
+    function open(target, onQueue, onImage) {
         close();
         host = document.createElement("div");
         host.setAttribute("data-showme-ui", "");
         const root = host.attachShadow({ mode: "closed" });
         root.innerHTML = "<style>" + CSS_TEXT + '</style><div class="box"><p class="where"></p>' +
-            '<textarea rows="3" aria-label="Note" placeholder="Write one note"></textarea>' +
-            '<div class="bar"><small>Enter queues</small><button type="button">Cancel</button>' +
-            '<button type="button" class="go">Queue</button></div></div>';
+            '<textarea rows="3" aria-label="Comment" placeholder="Add a comment"></textarea><div class="pics"></div>' +
+            '<div class="bar"><small></small><button type="button">Cancel</button>' +
+            '<button type="button" class="go">Comment</button></div></div>';
         area = root.querySelector("textarea");
+        strip = root.querySelector(".pics");
         root.querySelector(".where").textContent = target.label;
         const queue = (sendNow) => {
             const text = area.value.trim();
-            if (!text) return;
+            const ids = pics;
+            if (!text && !ids.length) return;
             close();
-            onQueue(text, sendNow);
+            onQueue(text, sendNow, ids);
         };
         root.querySelector("button").onclick = close;
         root.querySelector(".go").onclick = () => queue(false);
+        area.onpaste = (e) => {
+            const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+            if (!files.length) return;
+            e.preventDefault();
+            files.forEach(onImage);
+        };
         area.onkeydown = (e) => {
             e.stopPropagation();
-            if (e.key === "Escape" && !area.value.trim()) close();
+            if (e.key === "Escape" && !area.value.trim() && !pics.length) close();
             if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
             e.preventDefault();
             queue(e.ctrlKey || e.metaKey);
@@ -72,9 +86,18 @@
         area.focus({ preventScroll: true });
     }
 
-    // True while the card holds words. The caller must not replace it then.
+    function addImage(id, url) {
+        if (!host || pics.length >= 4) return;
+        pics.push(id);
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = "Attached picture";
+        strip.append(img);
+    }
+
+    // True while the card holds words or pictures. The caller must not replace it then.
     function busy() {
-        if (!area || !area.value.trim()) return false;
+        if (!area || (!area.value.trim() && !pics.length)) return false;
         const box = area.parentNode;
         box.classList.remove("nudge");
         void box.offsetWidth;
@@ -83,5 +106,5 @@
         return true;
     }
 
-    window.showmeCard = { open, close, busy };
+    window.showmeCard = { open, close, busy, addImage };
 })();

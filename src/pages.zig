@@ -36,6 +36,7 @@ pub fn asset(req: *Request, path: []const u8) !bool {
         .{ "/card.js", @embedFile("card.js"), "text/javascript" },
         .{ "/ui-view.js", @embedFile("ui-view.js"), "text/javascript" },
         .{ "/ui-bar.js", @embedFile("ui-bar.js"), "text/javascript" },
+        .{ "/ui-images.js", @embedFile("ui-images.js"), "text/javascript" },
         .{ "/ui.js", @embedFile("ui.js"), "text/javascript" },
         .{ "/ui.css", @embedFile("ui.css"), "text/css" },
     };

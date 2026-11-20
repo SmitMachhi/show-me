@@ -19,7 +19,7 @@ export function initBar(on) {
 
     function setPanel(open) {
         document.body.classList.toggle("collapsed", !open);
-        el("toggle").setAttribute("aria-label", open ? "Hide the notes panel" : "Show the notes panel");
+        el("toggle").setAttribute("aria-label", open ? "Hide chat" : "Show chat");
         try { localStorage.setItem("showme:panel", open ? "open" : "closed"); } catch (e) {}
     }
 

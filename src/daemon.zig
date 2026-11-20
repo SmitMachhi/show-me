@@ -7,6 +7,7 @@ const reviews = @import("reviews.zig");
 const pages = @import("pages.zig");
 const presence = @import("presence.zig");
 const guard = @import("guard.zig");
+const images = @import("images.zig");
 const Io = std.Io;
 const net = Io.net;
 const Request = std.http.Server.Request;
@@ -77,7 +78,9 @@ fn route(sh: *reviews.Shared, req: *Request, port: u16, arena: std.mem.Allocator
     if (method == .POST) {
         var body_buf: [4096]u8 = undefined;
         const r = try req.readerExpectContinue(&body_buf);
-        c.body = r.allocRemaining(arena, .limited(reviews.max_note_bytes)) catch
+        const is_image = std.mem.startsWith(u8, path, "/image/");
+        const limit: usize = if (is_image) images.max_bytes else reviews.max_note_bytes;
+        c.body = r.allocRemaining(arena, .limited(limit)) catch
             return reply(req, .payload_too_large, "body too large\n");
     }
     if (method == .GET and is(path, "/health")) return reply(req, .ok, state.version);
@@ -96,6 +99,14 @@ fn route(sh: *reviews.Shared, req: *Request, port: u16, arena: std.mem.Allocator
     const action = path[1..slash];
     if (method == .GET and is(action, "a")) {
         return pages.artifact(sh, req, arena, key, std.mem.trimStart(u8, rest[16..], "/"));
+    }
+    if (method == .GET and is(action, "image")) {
+        const id = std.mem.trimStart(u8, rest[16..], "/");
+        const bytes = images.read(sh, arena, id) catch return reply(req, .not_found, "not found\n");
+        return req.respond(bytes, .{ .keep_alive = false, .extra_headers = &.{
+            .{ .name = "content-type", .value = images.mime(id) },
+            .{ .name = "x-content-type-options", .value = "nosniff" },
+        } });
     }
     if (rest.len != 16) return reply(req, .not_found, "not found\n");
     return if (method == .GET) get(c, action, key) else post(c, action, key);
@@ -123,6 +134,10 @@ fn post(c: Call, action: []const u8, key: reviews.Key) !void {
             return reply(c.req, .conflict, "the review has ended\n");
         }
         reviews.send(c.sh, c.arena, key, c.body) catch return reply(c.req, .bad_request, "body must be JSON\n");
+    } else if (is(action, "image")) {
+        const id = images.store(c.sh, c.arena, c.body) catch
+            return reply(c.req, .unsupported_media_type, "only PNG, JPEG and WebP pictures\n");
+        return reply(c.req, .ok, id);
     } else if (is(action, "reply")) {
         try reviews.reply(c.sh, c.arena, key, c.body);
     } else if (is(action, "end")) {

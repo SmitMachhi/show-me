@@ -5,6 +5,7 @@
     const CONTROLS = "a[href],button,input,select,textarea,label,summary,[contenteditable],[data-showme-action],[data-showme-ui]";
     const ACCENT = "#3657d6";
     const CSS_TEXT =
+        "html{scrollbar-width:thin;scrollbar-color:#8886 transparent}" +
         "html[data-showme-annotate] [data-showme-hover]{outline:2px solid " + ACCENT + "66;outline-offset:2px;cursor:crosshair}" +
         "[data-showme-picked]{outline:2px solid " + ACCENT + ";outline-offset:2px;box-shadow:0 0 0 6px " + ACCENT + "22}" +
         "[data-showme-flash]{animation:showme-flash .6s steps(2,jump-none)}" +
@@ -57,10 +58,11 @@
         unmark("data-showme-picked");
         (part || el).setAttribute("data-showme-picked", "");
         const label = note.node || (kind === "text" ? "“" + note.text.slice(0, 60) + "”" : note.text.slice(0, 60) || note.selector);
-        window.showmeCard.open({ label, rect: (part || el).getBoundingClientRect() }, (words, sendNow) => {
+        const card = window.showmeCard;
+        card.open({ label, rect: (part || el).getBoundingClientRect() }, (words, sendNow, images) => {
             unmark("data-showme-picked");
-            post(Object.assign({ type: "note", note: words, sendNow }, note));
-        });
+            post(Object.assign({ type: "note", note: words, sendNow }, images.length ? { images } : {}, note));
+        }, (file) => post({ type: "image", blob: file }));
     }
 
     function reveal(selector) {
@@ -122,6 +124,7 @@
         if (m.type === "mode") setMode(m.on);
         if (m.type === "reveal") reveal(m.selector);
         if (m.type === "restore") scrollTo(0, m.y);
+        if (m.type === "imageDone") window.showmeCard.addImage(m.id, m.url);
     });
 
     // For pages that are forms: window.showme.send("Use plan B", { plan: "B" })

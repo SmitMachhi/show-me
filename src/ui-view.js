@@ -1,6 +1,9 @@
-// Builds the rows of the notes list and renders agent replies. No state lives here.
+// Builds the chat bubbles and renders agent replies. No state lives here.
+import { thumb, idOf } from "/ui-images.js";
+
 const SVG = "http://www.w3.org/2000/svg";
-const RECEIPT = { "Not seen yet": "clock", Seen: "check", Done: "checks" };
+// Chat convention: one check is sent, two is seen, two in color is done.
+const RECEIPT = { Sent: "check", Seen: "checks", Done: "checks" };
 
 export function icon(name) {
     const svg = document.createElementNS(SVG, "svg");
@@ -11,27 +14,24 @@ export function icon(name) {
     return svg;
 }
 
-function kindIcon(n) {
-    if (n.kind === "end") return "stop";
-    if (n.node) return "graph";
-    if (n.kind === "text") return "text";
-    if (n.selector) return "pointer";
-    return n.kind === "page" ? "page" : "message";
-}
-
-function label(n) {
-    if (n.kind === "end") return "End";
-    if (n.node) return n.node;
-    if (n.kind === "text") return "“" + n.text.slice(0, 80) + "”";
-    if (n.selector) return n.text ? n.text.slice(0, 60) : n.selector;
-    return n.kind === "page" ? "From the page" : "Message";
-}
-
 function make(tag, cls, text) {
     const el = document.createElement(tag);
     if (cls) el.className = cls;
     if (text) el.textContent = text;
     return el;
+}
+
+// What the note points at, shown like a quoted message. A plain message has none.
+function quote(n) {
+    let name = "pointer";
+    let text = n.text ? n.text.slice(0, 80) : n.selector;
+    if (n.node) [name, text] = ["graph", n.node];
+    else if (n.kind === "text") name = "text";
+    else if (n.kind === "page") [name, text] = ["page", "Form answer"];
+    else if (!n.selector) return null;
+    const q = make("div", "quote");
+    q.append(icon(name), make("span", "", text));
+    return q;
 }
 
 // Inline marks: `code`, **bold**, *italic* and http links. Everything else is plain text.
@@ -51,7 +51,7 @@ function inline(text, into) {
     }
 }
 
-// One small Markdown subset for agent replies: paragraphs, lists, headings as bold
+// A small Markdown subset for agent replies: paragraphs, lists, headings as bold
 // lines, fenced code. Built as DOM nodes, so reply text can never become markup.
 export function markdown(text) {
     const out = document.createDocumentFragment();
@@ -75,46 +75,54 @@ export function markdown(text) {
     return out;
 }
 
-function row(cls, iconName, where, tail) {
-    const li = make("li", cls);
-    const head = make("div", "head");
-    head.append(icon(iconName), make("span", "", where));
-    if (tail) head.append(tail);
-    li.append(head);
-    return li;
+// The words and pictures of one of the reviewer's notes.
+function body(n, urlOf) {
+    const parts = [];
+    const q = quote(n);
+    if (q) parts.push(q);
+    if (n.note) parts.push(make("p", "", n.note));
+    if (n.images && n.images.length) {
+        const box = make("div", "thumbs");
+        for (const p of n.images) box.append(thumb(urlOf(idOf(p))));
+        parts.push(box);
+    }
+    return parts;
 }
 
 // `changed` is true when the receipt differs from the last render, so it animates once.
-export function sentRow(s, changed, onReveal) {
+export function sentRow(s, changed, onReveal, urlOf) {
     if (s.agent) {
-        const li = row("agent", "agent", "Agent");
-        li.append(make("div", "md"));
-        li.lastChild.append(markdown(s.text));
+        const li = make("li", "agent md");
+        li.append(markdown(s.text));
         return li;
     }
+    if (s.note.kind === "end") return make("li", "system", "Review ended");
+    const li = make("li", "me");
     const receipt = make("em", (s.state === "Done" ? "done" : "") + (changed ? " changed" : ""));
-    receipt.append(icon(RECEIPT[s.state]), s.state);
-    const li = row("", kindIcon(s.note), label(s.note), s.note.kind === "end" ? null : receipt);
-    li.append(make("p", "", s.note.note || ""));
+    receipt.title = s.state;
+    receipt.append(icon(RECEIPT[s.state]));
+    li.append(...body(s.note, urlOf), receipt);
     if (s.note.selector) li.onclick = () => onReveal(s.note.selector);
     return li;
 }
 
-// One unsent note. Click it to edit in place: Enter saves, Escape cancels, empty removes.
+// A note that is not sent yet. Click it to edit: Enter saves, Escape cancels, empty removes.
 export function queuedRow(n, on) {
+    const li = make("li", "me queued");
     const remove = make("button", "plain");
     remove.type = "button";
-    remove.setAttribute("aria-label", "Remove this note");
+    remove.title = "Remove";
+    remove.setAttribute("aria-label", "Remove");
     remove.append(icon("x"));
-    const li = row("queued", kindIcon(n), label(n), remove);
-    const words = li.appendChild(make("p", "", n.note));
+    li.append(...body(n, on.url), remove);
     remove.onclick = (e) => {
         e.stopPropagation();
         li.classList.add("leave");
         setTimeout(on.remove, 80);
     };
     li.onclick = () => {
-        if (li.querySelector("textarea")) return;
+        const words = li.querySelector("p");
+        if (li.querySelector("textarea") || !words) return;
         if (n.selector) on.reveal(n.selector);
         const area = make("textarea");
         area.value = n.note;

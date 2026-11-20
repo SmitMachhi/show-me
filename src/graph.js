@@ -30,6 +30,7 @@
         const b = document.createElement("button");
         b.className = "showme-btn";
         b.setAttribute("aria-label", label);
+        b.title = label;
         b.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + ICONS[name] + '"/></svg>';
         b.onclick = onclick;
         return b;
@@ -104,7 +105,7 @@
         nav.append(
             button("plus", "Zoom in", () => view.zoom(0.8)),
             button("minus", "Zoom out", () => view.zoom(1.25)),
-            button("fit", "Fit to window", view.fit),
+            button("fit", "Fit", view.fit),
             button("close", "Close", shut),
         );
     }
@@ -113,6 +114,6 @@
     style.textContent = CSS_TEXT;
     document.head.appendChild(style);
     for (const svg of document.querySelectorAll("figure.showme-graph > svg")) {
-        svg.after(button("expand", "Expand this diagram", () => expand(svg)));
+        svg.after(button("expand", "Expand", () => expand(svg)));
     }
 })();

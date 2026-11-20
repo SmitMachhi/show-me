@@ -21,36 +21,38 @@
     <symbol id="i-more" viewBox="0 0 24 24"><path d="M12 5v.01M12 12v.01M12 19v.01"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></symbol>
     <symbol id="i-reload" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 6.3M20 4v7h-7"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m4 18 5-5 4 4 3-3 4 4"/></symbol>
     <symbol id="i-stop" viewBox="0 0 24 24"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M15 8l4 4-4 4M19 12H9"/></symbol>
 </svg>
 <header>
     <strong>show-me</strong>
     <span id="title"></span>
     <span id="agent" class="presence" data-state="nobody" role="status"><i></i><span></span></span>
-    <button id="mode" class="switch" type="button" role="switch" aria-checked="true" title="Ctrl+I"><i></i>Annotate</button>
-    <button id="toggle" class="tool" type="button" aria-label="Hide the notes panel"><svg class="icon"><use href="#i-panel"/></svg><b id="badge"></b></button>
+    <button id="mode" class="switch" type="button" role="switch" aria-checked="true" title="Comment mode (Ctrl+I)"><i></i>Comment</button>
+    <button id="toggle" class="tool" type="button" title="Hide chat" aria-label="Hide chat"><svg class="icon"><use href="#i-panel"/></svg><b id="badge"></b></button>
     <div class="menu">
-        <button id="more" class="tool" type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded="false"><svg class="icon"><use href="#i-more"/></svg></button>
+        <button id="more" class="tool" type="button" title="More" aria-label="More" aria-haspopup="menu" aria-expanded="false"><svg class="icon"><use href="#i-more"/></svg></button>
         <div id="menu" role="menu" hidden>
             <button id="copy" type="button" role="menuitem"><svg class="icon"><use href="#i-copy"/></svg><span>Copy file path</span></button>
-            <button id="reload" type="button" role="menuitem"><svg class="icon"><use href="#i-reload"/></svg><span>Reload page</span></button>
+            <button id="reload" type="button" role="menuitem"><svg class="icon"><use href="#i-reload"/></svg><span>Reload</span></button>
             <button id="end" type="button" role="menuitem"><svg class="icon"><use href="#i-stop"/></svg><span>End review</span></button>
         </div>
     </div>
 </header>
 <main>
-    <iframe id="page" title="Page under review" sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
+    <iframe id="page" title="Page" sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
     <aside>
         <p id="banner" role="alert" hidden></p>
         <ul id="list"></ul>
-        <p id="empty"><svg class="icon"><use href="#i-pointer"/></svg>Click any part of the page to leave one note.</p>
-        <p id="over">Review ended. Return to your agent.</p>
+        <p id="empty"><svg class="icon"><use href="#i-pointer"/></svg>Click anything on the page to comment.</p>
+        <p id="over">Review ended</p>
         <form id="form" class="composer">
-            <textarea id="note" rows="2" aria-label="Message" placeholder="Write one message"></textarea>
+            <div id="thumbs" class="thumbs"></div>
             <div class="bar">
-                <small>Enter sends</small>
-                <button type="button" id="sendEnd" class="ghost">Send and end</button>
-                <button type="submit" id="send" class="send" aria-label="Send notes">
+                <button type="button" id="attach" class="tool" title="Attach image" aria-label="Attach image"><svg class="icon"><use href="#i-image"/></svg></button>
+                <input id="file" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+                <textarea id="note" rows="1" aria-label="Message" placeholder="Message"></textarea>
+                <button type="submit" id="send" class="send" title="Send" aria-label="Send">
                     <b id="count"></b>
                     <svg class="icon go"><use href="#i-send"/></svg>
                     <svg class="icon done"><use href="#i-check"/></svg>

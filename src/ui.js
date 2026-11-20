@@ -3,12 +3,13 @@
 // the ended state come back from the daemon's log.
 import { sentRow, queuedRow } from "/ui-view.js";
 import { initBar } from "/ui-bar.js";
+import { createImages } from "/ui-images.js";
 
 const key = location.pathname.split("/").pop();
 const el = (id) => document.getElementById(id);
 const page = el("page");
 const note = el("note");
-const AGENT = { nobody: "No agent listens", listening: "Agent listens", working: "Agent works on your notes" };
+const AGENT = { nobody: "Agent offline", listening: "Agent", working: "Agent is working" };
 const saved = (name, fallback) => {
     try { return JSON.parse(sessionStorage.getItem("showme:" + name + ":" + key)) ?? fallback; } catch (e) { return fallback; }
 };
@@ -26,6 +27,7 @@ let scrollY = saved("scroll", 0);
 let rowCount = -1;
 let replies = -1;
 let unseenReply = false;
+const images = createImages(key, () => render());
 
 const bar = initBar({
     mode: setMode,
@@ -48,10 +50,11 @@ function reloadPage() {
 function render() {
     save("queue", queue);
     const list = el("list");
-    const rows = sent.map((s, i) => sentRow(s, states[i] !== undefined && states[i] !== s.state, reveal));
+    const rows = sent.map((s, i) => sentRow(s, states[i] !== undefined && states[i] !== s.state, reveal, images.url));
     states = sent.map((s) => s.state);
     queue.forEach((n, i) => rows.push(queuedRow(n, {
         reveal,
+        url: images.url,
         remove: () => { queue.splice(i, 1); render(); },
         save: (text) => { if (text) n.note = text; else queue.splice(i, 1); render(); },
     })));
@@ -62,9 +65,8 @@ function render() {
     list.replaceChildren(...rows);
     if (added) list.scrollTop = list.scrollHeight;
     el("count").textContent = queue.length || "";
-    const idle = queue.length === 0 && !note.value.trim();
+    const idle = queue.length === 0 && !note.value.trim() && !images.count();
     el("send").disabled = ended || idle;
-    el("sendEnd").disabled = ended;
     note.disabled = ended;
     bar.setBadge(queue.length, unseenReply);
     bar.setEnded(ended);
@@ -84,8 +86,8 @@ async function loadLog() {
         try { e = JSON.parse(line); } catch (err) { continue; }
         const notes = out.filter((s) => !s.agent);
         if (e.t === "open") file = e.file;
-        if (e.t === "note") out.push({ note: e.data, state: "Not seen yet" });
-        if (e.t === "ack") notes.slice(0, e.n).forEach((s) => { if (s.state === "Not seen yet") s.state = "Seen"; });
+        if (e.t === "note") out.push({ note: e.data, state: "Sent" });
+        if (e.t === "ack") notes.slice(0, e.n).forEach((s) => { if (s.state === "Sent") s.state = "Seen"; });
         if (e.t === "reply") {
             notes.forEach((s) => { if (s.state === "Seen") s.state = "Done"; });
             out.push({ agent: true, text: e.text });
@@ -104,7 +106,8 @@ async function loadLog() {
 // Sends the queued notes, plus the composer text as one message. `andEnd` ends the review after.
 async function send(andEnd) {
     const text = note.value.trim();
-    if (text) queue.push({ kind: "message", note: text });
+    const pics = images.take();
+    if (text || pics.length) queue.push(Object.assign({ kind: "message", note: text }, pics.length ? { images: pics } : {}));
     note.value = "";
     save("draft", "");
     try {
@@ -119,7 +122,7 @@ async function send(andEnd) {
         if (andEnd) await fetch("/end/" + key, { method: "POST" });
         showBanner("");
     } catch (e) {
-        showBanner("Not sent. Run show-me open again, then press Send.");
+        showBanner("Couldn't send. Run show-me open again, then retry.");
     }
     render();
 }
@@ -140,6 +143,8 @@ addEventListener("message", (e) => {
         save("scroll", scrollY = m.y);
     } else if (m.type === "toggleMode") {
         setMode(!bar.isAnnotate());
+    } else if (m.type === "image") {
+        images.upload(m.blob).then((id) => id && tell({ type: "imageDone", id, url: images.url(id) }));
     } else if (m.type === "note") {
         const { type, source, sendNow, ...n } = m;
         queue.push(n);
@@ -149,11 +154,15 @@ addEventListener("message", (e) => {
 });
 
 el("form").onsubmit = (e) => { e.preventDefault(); send(false); };
-el("sendEnd").onclick = () => send(true);
 el("toggle").addEventListener("click", () => { unseenReply = false; render(); });
 page.onload = () => page.classList.remove("loading");
 note.value = saved("draft", "");
-note.oninput = () => { save("draft", note.value); render(); };
+note.oninput = () => {
+    save("draft", note.value);
+    note.style.height = "auto";
+    note.style.height = Math.min(note.scrollHeight, 140) + "px";
+    render();
+};
 note.onkeydown = (e) => {
     if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
     e.preventDefault();
@@ -164,7 +173,7 @@ note.onkeydown = (e) => {
 const stream = new EventSource("/events/" + key);
 let lost = null;
 stream.onerror = () => {
-    lost = lost || setTimeout(() => showBanner("show-me stopped. Run show-me open again."), 3000);
+    lost = lost || setTimeout(() => showBanner("show-me isn't running. Run show-me open again."), 3000);
 };
 stream.onopen = () => {
     if (lost) location.reload();

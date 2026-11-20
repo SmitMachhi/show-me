@@ -5,6 +5,7 @@
 // Limits: one changed log is reread whole, and all reviews share one wake-up signal.
 const std = @import("std");
 const presence = @import("presence.zig");
+const images = @import("images.zig");
 const Io = std.Io;
 
 pub const Key = [16]u8;
@@ -90,7 +91,9 @@ pub fn send(sh: *Shared, arena: std.mem.Allocator, key: Key, body: []const u8) !
     const items: []const std.json.Value = if (value == .array) value.array.items else &.{value};
     var lines: std.ArrayList(u8) = .empty;
     for (items) |item| {
-        const data = try std.json.Stringify.valueAlloc(arena, item, .{});
+        var note = item;
+        try images.resolve(sh, arena, &note);
+        const data = try std.json.Stringify.valueAlloc(arena, note, .{});
         try lines.print(arena, "{s}{s}}}\n", .{ note_prefix, data });
     }
     try append(sh, key, lines.items);
