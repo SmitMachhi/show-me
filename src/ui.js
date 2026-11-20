@@ -9,7 +9,7 @@ const key = location.pathname.split("/").pop();
 const el = (id) => document.getElementById(id);
 const page = el("page");
 const note = el("note");
-const AGENT = { nobody: "Agent offline", listening: "Agent", working: "Agent is working" };
+const AGENT = { nobody: "Agent offline", listening: "Agent online", working: "Agent busy" };
 const saved = (name, fallback) => {
     try { return JSON.parse(sessionStorage.getItem("showme:" + name + ":" + key)) ?? fallback; } catch (e) { return fallback; }
 };
