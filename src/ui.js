@@ -4,6 +4,7 @@
 import { sentRow, queuedRow } from "/ui-view.js";
 import { initBar } from "/ui-bar.js";
 import { createImages } from "/ui-images.js";
+import { createChanges } from "/ui-changes.js";
 
 const key = location.pathname.split("/").pop();
 const el = (id) => document.getElementById(id);
@@ -28,6 +29,7 @@ let rowCount = -1;
 let replies = -1;
 let unseenReply = false;
 const images = createImages(key, () => render());
+const changes = createChanges(key, tell);
 
 const bar = initBar({
     mode: setMode,
@@ -116,6 +118,7 @@ async function send(andEnd) {
             const r = await fetch("/send/" + key, { method: "POST", body: JSON.stringify(queue) });
             if (!r.ok) throw new Error(r.status);
             rowCount -= queue.length;
+            changes.reset();
             queue = [];
             el("send").classList.add("sent");
             setTimeout(() => el("send").classList.remove("sent"), 900);
@@ -136,6 +139,7 @@ function showBanner(text) {
 addEventListener("message", (e) => {
     const m = e.data;
     if (e.source !== page.contentWindow || !m || m.source !== "showme") return;
+    changes.onMessage(m);
     if (m.type === "ready") {
         bar.setTitle(m.title);
         setMode(saved("mode", m.annotate));

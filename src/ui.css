@@ -129,3 +129,6 @@ textarea { display: block; flex: 1; min-width: 0; padding: 6px 4px; border: 0; o
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01s !important; transition-duration: 0.01s !important; }
 }
+/* How many blocks of the page changed since the last send. Click to step through them. */
+#changes { height: 24px; padding: 0 10px; border-radius: 12px; background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); font-size: 12px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; animation: pop 0.09s var(--ease); }
+#changes[hidden] { display: none; }
