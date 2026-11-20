@@ -2,7 +2,7 @@
 
 Date: 2026-11-20. One machine, Windows 11. Linux and macOS: not measured.
 
-`timeit.rs` measures full wall time from process start to process exit. Each time is the median of 20 runs after 3 warm-up runs. Both daemons were in operation before the runs.
+`timeit.rs` measures full wall time from process start to process exit. Each time is the median of 20 runs after 3 warm-up runs. The lavish-axi reply had 10 runs. Both daemons were in operation before the runs.
 
 ## Time for each command
 
@@ -28,7 +28,16 @@ Date: 2026-11-20. One machine, Windows 11. Linux and macOS: not measured.
 | Open | 41 bytes | 3,090 bytes |
 | List, 1 review | 114 bytes | 10,656 bytes |
 | Reply | 5 bytes | 352 bytes |
-| Guidance | 4,005 bytes (skill) | 71,483 bytes (hook, help, design, 8 playbooks) |
+
+The lavish-axi list contains its help text. One list with no session has 10,493 bytes.
+
+## Guidance text
+
+| Event | show-me | lavish-axi |
+| --- | ---: | ---: |
+| Session start | 0 bytes | 10,493 bytes (the hook runs `lavish-axi`) |
+| Agent writes one page | 4,005 bytes (`SKILL.md`) | 1,820 bytes (`SKILL.md`), then 1,216 to 10,385 bytes for each playbook |
+| All text | 6,363 bytes (`SKILL.md`, `base.html`) | 59,232 bytes (`SKILL.md`, help, `design`, 8 playbooks) |
 
 ## Conditions
 
