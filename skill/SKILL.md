@@ -16,7 +16,8 @@ Needs the `show-me` program on PATH. Diagrams need Graphviz.
 5. `show-me wait <file> --reply "what changed"` shows your reply and waits again. Go to step 4.
 
 If `wait` is stopped by one time limit, run the same command again. No note is lost.
-Stop when the person says the review is done. Then answer in chat.
+The note `{"kind":"end"}` means the person ended the review. Stop, and answer in chat. Do not open that file again unless they ask; then use `show-me open <file> --reopen`.
+When you finish first, run `show-me end <file>`.
 
 ## Notes
 
@@ -58,6 +59,7 @@ Write DOT, never SVG. The program draws it:
 
 ## Forms
 
+On form pages, put `data-showme-annotate="off"` on `<html>` so clicks use the controls.
 To collect one choice, use native controls and send the final answer once:
 
 ```html
