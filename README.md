@@ -49,6 +49,7 @@ show-me wait plan.html --reply "Title fixed"  # shows the reply, then waits agai
 - One click on any element opens the note box at that element. Selected text opens the same box.
 - The note box and the chat accept pasted images.
 - The pen button on each diagram lets the reviewer draw on the diagram. The note contains the drawing as one image and the names of the nodes below the strokes.
+- The pen button in the chat opens one blank sheet for one sketch. The message contains the sketch as one image.
 - The green number shows the changes since the last sent note. One click goes to the next change.
 - The amber number shows layout problems that the page found. One click sends all problems to the agent.
 - The disk keeps each note until the agent reads the note. If the agent command stops, the notes stay safe.

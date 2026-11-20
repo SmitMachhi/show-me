@@ -2,6 +2,7 @@
 // pointer, then turns the SVG and the strokes into one PNG. Strokes are SVG paths in
 // viewBox units, so they follow zoom and pan.
 // Exposes window.showmeDraw.attach(svg, active, onChange) -> { undo, count, summary, png }.
+// The review panel loads this file too, for its sketch pad.
 (function () {
     const NS = "http://www.w3.org/2000/svg";
     const MAX_EDGE = 1200; // longest PNG side in pixels: enough to read, cheap to send
@@ -84,8 +85,14 @@
                 onChange();
             },
             summary: () => describe(strokes),
-            png: () => toPng(svg, home),
+            // `onlyInk` cuts the picture down to the strokes: for one blank sheet.
+            png: (onlyInk) => toPng(svg, onlyInk ? around(ink.getBBox()) : home),
         };
+    }
+
+    // The view box that holds one box with some room around it.
+    function around(box) {
+        return [box.x - 24, box.y - 24, box.width + 48, box.height + 48].join(" ");
     }
 
     // Says in words what the strokes point at, so the agent can often act without the picture.
@@ -100,13 +107,13 @@
         return "Drawing" + (on.size ? " on " + [...on].join(", ") : "") + (lines.length ? ". Lines: " + lines.join("; ") : "");
     }
 
-    // Resolves to one PNG blob of the whole picture on white, whatever the zoom is now.
-    function toPng(svg, home) {
+    // Resolves to one PNG blob of the view box `view` on white, whatever the zoom is now.
+    function toPng(svg, view) {
         const copy = svg.cloneNode(true);
-        const [, , w, h] = home.split(/[ ,]+/).map(Number);
+        const [, , w, h] = view.split(/[ ,]+/).map(Number);
         const k = Math.min(2, MAX_EDGE / Math.max(w, h));
         copy.setAttribute("xmlns", NS);
-        copy.setAttribute("viewBox", home);
+        copy.setAttribute("viewBox", view);
         copy.setAttribute("width", Math.round(w * k));
         copy.setAttribute("height", Math.round(h * k));
         return new Promise((done, fail) => {

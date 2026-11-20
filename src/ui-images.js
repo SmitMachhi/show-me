@@ -1,5 +1,7 @@
-// Pictures on notes: upload, small previews, and the composer's attach, paste and drop.
+// Pictures on notes: upload, small previews, and the composer's attach, sketch, paste and drop.
 // A picture is sent to the daemon at once and the note then carries only its id.
+import { initSketch } from "/ui-sketch.js";
+
 const el = (id) => document.getElementById(id);
 const MAX_PER_NOTE = 4;
 
@@ -39,6 +41,7 @@ export function createImages(key, onChange) {
     }
 
     el("attach").onclick = () => el("file").click();
+    initSketch(el("sketch"), (blob) => add([blob]));
     el("file").onchange = () => { add([...el("file").files]); el("file").value = ""; };
     el("note").addEventListener("paste", (e) => {
         const files = [...e.clipboardData.files];
