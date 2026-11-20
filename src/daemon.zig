@@ -26,7 +26,7 @@ pub fn serve(init: std.process.Init) !void {
         state.fail("cannot listen on 127.0.0.1:{d}: {t}. Set SHOW_ME_PORT to a free port.", .{ port, e });
     try state.writeInfo(io, d, port);
     stdout.writeStreamingAll(io, "ready\n") catch {};
-    var shared: reviews.Shared = .{ .io = io, .dir = d };
+    var shared: reviews.Shared = .{ .io = io, .dir = d, .env = init.environ_map };
     while (true) {
         const s = server.accept(io) catch continue;
         const t = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, handle, .{ &shared, s, port }) catch {

@@ -17,6 +17,7 @@ pub const reply_prefix = "{\"t\":\"reply\",\"text\":";
 pub const Shared = struct {
     io: Io,
     dir: Io.Dir,
+    env: *const std.process.Environ.Map,
     mutex: Io.Mutex = .init,
     changed: Io.Condition = .init,
     tabs: presence.Table = @splat(null),

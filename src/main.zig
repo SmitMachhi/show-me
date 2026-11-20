@@ -6,6 +6,7 @@ const state = @import("state.zig");
 const daemon = @import("daemon.zig");
 const client = @import("client.zig");
 const reviews = @import("reviews.zig");
+const graphs = @import("graphs.zig");
 const Io = std.Io;
 
 const usage =
@@ -14,6 +15,7 @@ const usage =
     \\  show-me wait <file.html> [--reply "text"]   show the reply, then block until
     \\                             the reviewer sends notes, and print them
     \\  show-me reply <file.html> "text"   show one reply to the reviewer
+    \\  show-me check <file.html>  draw the page's diagrams and report errors
     \\  show-me stop               end the background daemon
     \\  show-me --version
     \\
@@ -27,6 +29,7 @@ pub fn main(init: std.process.Init) !void {
     if (std.mem.eql(u8, cmd, "open")) return open(init, args);
     if (std.mem.eql(u8, cmd, "wait")) return wait(init, args);
     if (std.mem.eql(u8, cmd, "reply")) return reply(init, args);
+    if (std.mem.eql(u8, cmd, "check")) return check(init, args);
     if (std.mem.eql(u8, cmd, "stop")) return stop(init);
     if (std.mem.eql(u8, cmd, "--version")) return say(io, state.version ++ "\n");
     std.debug.print("{s}", .{usage});
@@ -47,9 +50,30 @@ fn realFile(init: std.process.Init, args: []const []const u8, cmd: []const u8) [
         state.fail("cannot read '{s}'. Check the path.", .{file});
 }
 
+// Draws the page's diagrams and reports each one that fails. Exits 1 on any failure,
+// so a broken page never reaches the reviewer.
+fn checkPage(init: std.process.Init, path: []const u8) void {
+    const io = init.io;
+    const arena = init.arena.allocator();
+    const html = Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(64 * 1024 * 1024)) catch |e|
+        state.fail("cannot read '{s}': {t}", .{ path, e });
+    const ctx: graphs.Ctx = .{ .io = io, .dir = state.dir(io, arena, init.environ_map), .env = init.environ_map };
+    const drawn = graphs.expand(ctx, arena, html) catch |e|
+        state.fail("cannot draw the diagrams: {t}", .{e});
+    if (drawn.errors.len == 0) return;
+    std.debug.print("{s}", .{drawn.errors});
+    state.fail("fix the diagrams listed above, then run the command again.", .{});
+}
+
+fn check(init: std.process.Init, args: []const []const u8) void {
+    checkPage(init, realFile(init, args, "check"));
+    say(init.io, "ok\n");
+}
+
 fn open(init: std.process.Init, args: []const []const u8) void {
     const arena = init.arena.allocator();
     const path = realFile(init, args, "open");
+    checkPage(init, path);
     const port = client.ensureDaemon(init);
     const res = client.call(init.io, arena, port, "POST", "/reviews", path) catch |e|
         state.fail("the daemon did not answer: {t}. Run `show-me stop`, then retry.", .{e});

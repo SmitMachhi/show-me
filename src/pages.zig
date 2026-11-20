@@ -4,6 +4,7 @@
 const std = @import("std");
 const reviews = @import("reviews.zig");
 const presence = @import("presence.zig");
+const graphs = @import("graphs.zig");
 const Io = std.Io;
 const Request = std.http.Server.Request;
 const Header = std.http.Header;
@@ -55,7 +56,11 @@ pub fn artifact(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, ke
         return respond(req, .not_found, "not found\n", &.{});
     const data = Io.Dir.cwd().readFileAlloc(sh.io, path, arena, .limited(max_file_bytes)) catch
         return respond(req, .not_found, "not found\n", &.{});
-    const body = if (sub.len == 0) try std.mem.concat(arena, u8, &.{ data, script_tag }) else data;
+    var body = data;
+    if (sub.len == 0) {
+        const drawn = try graphs.expand(.{ .io = sh.io, .dir = sh.dir, .env = sh.env }, arena, data);
+        body = try std.mem.concat(arena, u8, &.{ drawn.html, script_tag });
+    }
     return respond(req, .ok, body, &.{ .{ .name = "content-type", .value = mime(path) }, sandbox, no_store });
 }
 
