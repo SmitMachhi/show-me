@@ -1,6 +1,7 @@
 // show-me: one program that is both the command line tool and the daemon.
 // `serve` is internal: `open` starts it in the background when needed.
 const std = @import("std");
+const builtin = @import("builtin");
 const state = @import("state.zig");
 const daemon = @import("daemon.zig");
 const client = @import("client.zig");
@@ -49,8 +50,28 @@ fn open(init: std.process.Init, args: []const []const u8) void {
     const port = client.ensureDaemon(init);
     const res = client.call(init.io, arena, port, "POST", "/reviews", path) catch |e|
         state.fail("the daemon did not answer: {t}. Run `show-me stop`, then retry.", .{e});
-    if (res.status != 200) state.fail("the daemon refused the file: {s}", .{res.body});
-    say(init.io, std.fmt.allocPrint(arena, "http://127.0.0.1:{d}/r/{s}\n", .{ port, res.body }) catch return);
+    if (res.status != 200 or res.body.len < 18) state.fail("the daemon refused the file: {s}", .{res.body});
+    const url = std.fmt.allocPrint(arena, "http://127.0.0.1:{d}/r/{s}", .{ port, res.body[0..16] }) catch return;
+    const tab_is_open = !std.mem.eql(u8, res.body[17..], "0");
+    const no_open = args.len > 3 and std.mem.eql(u8, args[3], "--no-open");
+    if (!tab_is_open and !no_open) browse(init.io, url);
+    say(init.io, std.fmt.allocPrint(arena, "{s}\n", .{url}) catch return);
+}
+
+// Opens the default browser. Failure is not fatal: the URL is printed either way.
+fn browse(io: Io, url: []const u8) void {
+    const argv: []const []const u8 = switch (builtin.os.tag) {
+        .windows => &.{ "cmd", "/c", "start", "", url },
+        .macos => &.{ "open", url },
+        else => &.{ "xdg-open", url },
+    };
+    _ = std.process.spawn(io, .{
+        .argv = argv,
+        .stdin = .ignore,
+        .stdout = .ignore,
+        .stderr = .ignore,
+        .create_no_window = true,
+    }) catch std.debug.print("show-me: could not open the browser. Open the address below by hand.\n", .{});
 }
 
 fn wait(init: std.process.Init, args: []const []const u8) void {

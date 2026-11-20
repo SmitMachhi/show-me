@@ -17,7 +17,44 @@ pub const Shared = struct {
     dir: Io.Dir,
     mutex: Io.Mutex = .init,
     changed: Io.Condition = .init,
+    // One slot per open browser tab. A full table only makes `open` launch one more tab.
+    tabs: [32]?Key = @splat(null),
 };
+
+pub fn tabOpen(sh: *Shared, key: Key) ?usize {
+    sh.mutex.lockUncancelable(sh.io);
+    defer sh.mutex.unlock(sh.io);
+    for (&sh.tabs, 0..) |*slot, i| {
+        if (slot.* != null) continue;
+        slot.* = key;
+        return i;
+    }
+    return null;
+}
+
+pub fn tabClose(sh: *Shared, slot: ?usize) void {
+    sh.mutex.lockUncancelable(sh.io);
+    defer sh.mutex.unlock(sh.io);
+    if (slot) |i| sh.tabs[i] = null;
+}
+
+pub fn tabCount(sh: *Shared, key: Key) usize {
+    sh.mutex.lockUncancelable(sh.io);
+    defer sh.mutex.unlock(sh.io);
+    var n: usize = 0;
+    for (sh.tabs) |slot| {
+        if (slot) |k| n += @intFromBool(std.mem.eql(u8, &k, &key));
+    }
+    return n;
+}
+
+// The reviewed file's real path, read back from the first log line.
+pub fn fileOf(sh: *Shared, arena: std.mem.Allocator, key: Key) ![]const u8 {
+    const text = try sh.dir.readFileAlloc(sh.io, &logName(key), arena, .limited(max_log_bytes));
+    const line = text[0 .. std.mem.findScalar(u8, text, '\n') orelse text.len];
+    const head = try std.json.parseFromSliceLeaky(struct { file: []const u8 }, arena, line, .{ .ignore_unknown_fields = true });
+    return head.file;
+}
 
 // The key is derived from the real path, so it is an address, not a secret.
 pub fn keyOf(real_path: []const u8) Key {
@@ -61,11 +98,17 @@ fn append(sh: *Shared, key: Key, line: []const u8) !void {
     try f.writePositionalAll(sh.io, line, try f.length(sh.io));
 }
 
-// The body comes from a browser. Reparse it so the log line is one valid JSON line.
+// The body comes from a browser. Reparse it so each log line is one valid JSON line.
+// One array becomes one note per item, written in one append.
 pub fn send(sh: *Shared, arena: std.mem.Allocator, key: Key, body: []const u8) !void {
     const value = try std.json.parseFromSliceLeaky(std.json.Value, arena, body, .{});
-    const data = try std.json.Stringify.valueAlloc(arena, value, .{});
-    try append(sh, key, try std.fmt.allocPrint(arena, "{s}{s}}}\n", .{ note_prefix, data }));
+    const items: []const std.json.Value = if (value == .array) value.array.items else &.{value};
+    var lines: std.ArrayList(u8) = .empty;
+    for (items) |item| {
+        const data = try std.json.Stringify.valueAlloc(arena, item, .{});
+        try lines.print(arena, "{s}{s}}}\n", .{ note_prefix, data });
+    }
+    try append(sh, key, lines.items);
     sh.changed.broadcast(sh.io);
 }
 

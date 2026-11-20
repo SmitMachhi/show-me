@@ -4,6 +4,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const state = @import("state.zig");
 const reviews = @import("reviews.zig");
+const pages = @import("pages.zig");
 const Io = std.Io;
 const net = Io.net;
 const Request = std.http.Server.Request;
@@ -70,9 +71,11 @@ fn route(sh: *reviews.Shared, req: *Request, port: u16, arena: std.mem.Allocator
         try reply(req, .ok, "bye\n");
         std.process.exit(0);
     }
+    if (method == .GET and std.mem.eql(u8, path, "/inject.js")) return pages.script(req);
     if (method == .POST and std.mem.eql(u8, path, "/reviews")) {
         const key = reviews.register(sh, arena, body) catch return reply(req, .bad_request, "bad path\n");
-        return reply(req, .ok, &key);
+        // Key, then how many browser tabs already show this review.
+        return reply(req, .ok, try std.fmt.allocPrint(arena, "{s} {d}", .{ key, reviews.tabCount(sh, key) }));
     }
     return routeReview(sh, req, arena, method, path, body);
 }
@@ -88,8 +91,15 @@ fn routeReview(
 ) !void {
     const slash = std.mem.findScalarPos(u8, path, 1, '/') orelse return reply(req, .not_found, "not found\n");
     const action = path[1..slash];
-    const key = reviews.parseKey(path[slash + 1 ..]) orelse return reply(req, .not_found, "not found\n");
+    const rest = path[slash + 1 ..];
+    const key = reviews.parseKey(rest[0..@min(rest.len, 16)]) orelse return reply(req, .not_found, "not found\n");
     if (!reviews.exists(sh, key)) return reply(req, .not_found, "no such review\n");
+    if (method == .GET and std.mem.eql(u8, action, "a")) {
+        return pages.artifact(sh, req, arena, key, std.mem.trimStart(u8, rest[16..], "/"));
+    }
+    if (rest.len != 16) return reply(req, .not_found, "not found\n");
+    if (method == .GET and std.mem.eql(u8, action, "r")) return pages.page(req);
+    if (method == .GET and std.mem.eql(u8, action, "events")) return pages.events(sh, req, arena, key);
     if (method == .GET and std.mem.eql(u8, action, "wait")) {
         return reply(req, .ok, try reviews.wait(sh, arena, key));
     }
