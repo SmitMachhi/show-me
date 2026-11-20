@@ -7,6 +7,7 @@ const daemon = @import("daemon.zig");
 const client = @import("client.zig");
 const reviews = @import("reviews.zig");
 const graphs = @import("graphs.zig");
+const lint = @import("lint.zig");
 const Io = std.Io;
 
 const usage =
@@ -50,7 +51,7 @@ fn realFile(init: std.process.Init, args: []const []const u8, cmd: []const u8) [
         state.fail("cannot read '{s}'. Check the path.", .{file});
 }
 
-// Draws the page's diagrams and reports each one that fails. Exits 1 on any failure,
+// Draws the diagrams and checks the words. Reports each failure and exits 1 on any,
 // so a broken page never reaches the reviewer.
 fn checkPage(init: std.process.Init, path: []const u8) void {
     const io = init.io;
@@ -60,9 +61,13 @@ fn checkPage(init: std.process.Init, path: []const u8) void {
     const ctx: graphs.Ctx = .{ .io = io, .dir = state.dir(io, arena, init.environ_map), .env = init.environ_map };
     const drawn = graphs.expand(ctx, arena, html) catch |e|
         state.fail("cannot draw the diagrams: {t}", .{e});
-    if (drawn.errors.len == 0) return;
-    std.debug.print("{s}", .{drawn.errors});
-    state.fail("fix the diagrams listed above, then run the command again.", .{});
+    var rules_buf: [4096]u8 = undefined;
+    const rules = lint.parseRules(ctx.dir.readFile(io, "rules", &rules_buf) catch "");
+    if (rules.unknown) |name| state.fail("unknown rule '{s}' in the rules file in the state folder.", .{name});
+    const words = lint.run(arena, html, rules) catch |e| state.fail("cannot check the words: {t}", .{e});
+    if (drawn.errors.len + words.len == 0) return;
+    std.debug.print("{s}{s}", .{ drawn.errors, words });
+    state.fail("fix each line listed above, then run the command again.", .{});
 }
 
 fn check(init: std.process.Init, args: []const []const u8) void {
