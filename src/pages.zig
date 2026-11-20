@@ -91,11 +91,12 @@ const Watch = struct {
     file_time: i96,
     log_size: u64,
     state: presence.State,
+    working: bool,
 
     fn now(sh: *reviews.Shared, key: reviews.Key, file: []const u8, prev: ?Watch) Watch {
         const log_size = reviews.logSize(sh, key) orelse 0;
         // The log is reread only when it grew.
-        var working = if (prev) |p| p.state == .working else false;
+        var working = if (prev) |p| p.working else false;
         if (prev == null or prev.?.log_size != log_size) {
             var tmp = std.heap.ArenaAllocator.init(std.heap.page_allocator);
             defer tmp.deinit();
@@ -107,6 +108,7 @@ const Watch = struct {
             .file_time = if (stat) |s| s.mtime.nanoseconds else 0,
             .log_size = log_size,
             .state = presence.state(sh, key, working),
+            .working = working,
         };
     }
 };

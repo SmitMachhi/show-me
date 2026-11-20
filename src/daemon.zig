@@ -6,6 +6,7 @@ const state = @import("state.zig");
 const reviews = @import("reviews.zig");
 const pages = @import("pages.zig");
 const presence = @import("presence.zig");
+const guard = @import("guard.zig");
 const Io = std.Io;
 const net = Io.net;
 const Request = std.http.Server.Request;
@@ -54,74 +55,88 @@ fn reply(req: *Request, status: std.http.Status, text: []const u8) !void {
     return req.respond(text, .{ .status = status, .keep_alive = false });
 }
 
+const Call = struct {
+    sh: *reviews.Shared,
+    req: *Request,
+    arena: std.mem.Allocator,
+    from: guard.Caller,
+    body: []const u8 = "",
+};
+
+fn is(a: []const u8, b: []const u8) bool {
+    return std.mem.eql(u8, a, b);
+}
+
 fn route(sh: *reviews.Shared, req: *Request, port: u16, arena: std.mem.Allocator) !void {
-    if (!allowed(req, port)) return reply(req, .forbidden, "forbidden\n");
+    var c: Call = .{ .sh = sh, .req = req, .arena = arena, .from = guard.caller(req, port) };
+    if (c.from == .refused) return reply(req, .forbidden, "forbidden\n");
     const method = req.head.method;
     const target = req.head.target;
     // Reading the body invalidates the head, so copy the path out first.
     const path = try arena.dupe(u8, target[0 .. std.mem.findScalar(u8, target, '?') orelse target.len]);
-    var body: []const u8 = "";
     if (method == .POST) {
         var body_buf: [4096]u8 = undefined;
         const r = try req.readerExpectContinue(&body_buf);
-        body = r.allocRemaining(arena, .limited(reviews.max_note_bytes)) catch
+        c.body = r.allocRemaining(arena, .limited(reviews.max_note_bytes)) catch
             return reply(req, .payload_too_large, "body too large\n");
     }
-    if (method == .GET and std.mem.eql(u8, path, "/health")) return reply(req, .ok, state.version);
-    if (method == .POST and std.mem.eql(u8, path, "/shutdown")) {
+    if (method == .GET and is(path, "/health")) return reply(req, .ok, state.version);
+    if (method == .POST and is(path, "/shutdown")) {
         try reply(req, .ok, "bye\n");
         std.process.exit(0);
     }
     if (method == .GET and try pages.asset(req, path)) return;
-    if (method == .POST and std.mem.eql(u8, path, "/reviews")) {
-        const key = reviews.register(sh, arena, body) catch return reply(req, .bad_request, "bad path\n");
-        // Key, then how many browser tabs already show this review.
-        return reply(req, .ok, try std.fmt.allocPrint(arena, "{s} {d}", .{ key, presence.count(sh, &sh.tabs, key) }));
-    }
-    return routeReview(sh, req, arena, method, path, body);
-}
+    if (method == .POST and is(path, "/reviews")) return register(c);
 
-// Routes of the form /<action>/<key>.
-fn routeReview(
-    sh: *reviews.Shared,
-    req: *Request,
-    arena: std.mem.Allocator,
-    method: std.http.Method,
-    path: []const u8,
-    body: []const u8,
-) !void {
+    // Everything else has the form /<action>/<key>.
     const slash = std.mem.findScalarPos(u8, path, 1, '/') orelse return reply(req, .not_found, "not found\n");
-    const action = path[1..slash];
     const rest = path[slash + 1 ..];
     const key = reviews.parseKey(rest[0..@min(rest.len, 16)]) orelse return reply(req, .not_found, "not found\n");
     if (!reviews.exists(sh, key)) return reply(req, .not_found, "no such review\n");
-    const is = struct {
-        fn is(a: []const u8, b: []const u8) bool {
-            return std.mem.eql(u8, a, b);
-        }
-    }.is;
+    const action = path[1..slash];
     if (method == .GET and is(action, "a")) {
         return pages.artifact(sh, req, arena, key, std.mem.trimStart(u8, rest[16..], "/"));
     }
     if (rest.len != 16) return reply(req, .not_found, "not found\n");
-    if (method == .GET) {
-        if (is(action, "r")) return pages.page(req);
-        if (is(action, "events")) return pages.events(sh, req, arena, key);
-        if (is(action, "log")) return reply(req, .ok, try reviews.readLog(sh, arena, key));
-        if (is(action, "wait")) return wait(sh, req, arena, key);
-    } else if (is(action, "send")) {
-        reviews.send(sh, arena, key, body) catch return reply(req, .bad_request, "body must be JSON\n");
-        return reply(req, .ok, "ok\n");
+    return if (method == .GET) get(c, action, key) else post(c, action, key);
+}
+
+// Answers with the key, how many browser tabs already show the review, and who ended it.
+fn register(c: Call) !void {
+    const key = reviews.register(c.sh, c.arena, c.body) catch return reply(c.req, .bad_request, "bad path\n");
+    const ended = reviews.endedBy(try reviews.readLog(c.sh, c.arena, key)) orelse "open";
+    const tabs = presence.count(c.sh, &c.sh.tabs, key);
+    return reply(c.req, .ok, try std.fmt.allocPrint(c.arena, "{s} {d} {s}", .{ key, tabs, ended }));
+}
+
+fn get(c: Call, action: []const u8, key: reviews.Key) !void {
+    if (is(action, "r")) return pages.page(c.req);
+    if (is(action, "events")) return pages.events(c.sh, c.req, c.arena, key);
+    if (is(action, "log")) return reply(c.req, .ok, try reviews.readLog(c.sh, c.arena, key));
+    if (is(action, "wait")) return wait(c.sh, c.req, c.arena, key);
+    return reply(c.req, .not_found, "not found\n");
+}
+
+fn post(c: Call, action: []const u8, key: reviews.Key) !void {
+    if (is(action, "send")) {
+        if (reviews.endedBy(try reviews.readLog(c.sh, c.arena, key)) != null) {
+            return reply(c.req, .conflict, "the review has ended\n");
+        }
+        reviews.send(c.sh, c.arena, key, c.body) catch return reply(c.req, .bad_request, "body must be JSON\n");
     } else if (is(action, "reply")) {
-        try reviews.reply(sh, arena, key, body);
-        return reply(req, .ok, "ok\n");
+        try reviews.reply(c.sh, c.arena, key, c.body);
+    } else if (is(action, "end")) {
+        try reviews.end(c.sh, c.arena, key, c.from == .browser);
+    } else if (is(action, "start")) {
+        try reviews.start(c.sh, key);
     } else if (is(action, "ack")) {
-        const n = std.fmt.parseInt(usize, std.mem.trim(u8, body, " \r\n"), 10) catch
-            return reply(req, .bad_request, "body must be a number\n");
-        try reviews.ack(sh, arena, key, n);
-        return reply(req, .ok, "ok\n");
+        const n = std.fmt.parseInt(usize, std.mem.trim(u8, c.body, " \r\n"), 10) catch
+            return reply(c.req, .bad_request, "body must be a number\n");
+        try reviews.ack(c.sh, c.arena, key, n);
+    } else {
+        return reply(c.req, .not_found, "not found\n");
     }
-    return reply(req, .not_found, "not found\n");
+    return reply(c.req, .ok, "ok\n");
 }
 
 // Holds the agent's request open until notes exist. One space goes out every two
@@ -142,24 +157,4 @@ fn wait(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key: revie
         try body.flush();
         if (notes != null) return;
     }
-}
-
-// DNS-rebinding and cross-site guard: Host must name this server, and a request that
-// writes must not carry another site's Origin. The CLI sends no Origin.
-fn allowed(req: *const Request, port: u16) bool {
-    var names: [2][32]u8 = undefined;
-    const a = std.fmt.bufPrint(&names[0], "127.0.0.1:{d}", .{port}) catch unreachable;
-    const b = std.fmt.bufPrint(&names[1], "localhost:{d}", .{port}) catch unreachable;
-    var host_ok = false;
-    var origin_ok = true;
-    var it = req.iterateHeaders();
-    while (it.next()) |h| {
-        if (std.ascii.eqlIgnoreCase(h.name, "host")) {
-            host_ok = std.mem.eql(u8, h.value, a) or std.mem.eql(u8, h.value, b);
-        } else if (std.ascii.eqlIgnoreCase(h.name, "origin")) {
-            const site = if (std.mem.startsWith(u8, h.value, "http://")) h.value[7..] else "";
-            origin_ok = std.mem.eql(u8, site, a) or std.mem.eql(u8, site, b);
-        }
-    }
-    return host_ok and (origin_ok or req.head.method == .GET);
 }

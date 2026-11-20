@@ -13,6 +13,8 @@ const max_log_bytes = 64 * 1024 * 1024;
 const note_prefix = "{\"t\":\"note\",\"data\":";
 pub const ack_prefix = "{\"t\":\"ack\",\"n\":";
 pub const reply_prefix = "{\"t\":\"reply\",\"text\":";
+const end_prefix = "{\"t\":\"end\",\"by\":";
+const start_line = "{\"t\":\"start\"}\n";
 
 pub const Shared = struct {
     io: Io,
@@ -102,6 +104,29 @@ pub fn ack(sh: *Shared, arena: std.mem.Allocator, key: Key, n: usize) !void {
 pub fn reply(sh: *Shared, arena: std.mem.Allocator, key: Key, text: []const u8) !void {
     const json = try std.json.Stringify.valueAlloc(arena, text, .{});
     try append(sh, key, try std.fmt.allocPrint(arena, "{s}{s}}}\n", .{ reply_prefix, json }));
+}
+
+// Ends the review. When the reviewer ends it, the agent learns of it as one last note.
+pub fn end(sh: *Shared, arena: std.mem.Allocator, key: Key, by_reviewer: bool) !void {
+    const who = if (by_reviewer) "reviewer" else "agent";
+    const last = if (by_reviewer) note_prefix ++ "{\"kind\":\"end\",\"note\":\"The reviewer ended the review.\"}}\n" else "";
+    try append(sh, key, try std.fmt.allocPrint(arena, "{s}{s}\"{s}\"}}\n", .{ last, end_prefix, who }));
+    sh.changed.broadcast(sh.io);
+}
+
+pub fn start(sh: *Shared, key: Key) !void {
+    try append(sh, key, start_line);
+}
+
+// Who ended the review, or null while it is open. One later start line reopens it.
+pub fn endedBy(log: []const u8) ?[]const u8 {
+    var by: ?[]const u8 = null;
+    var lines = std.mem.splitScalar(u8, log, '\n');
+    while (lines.next()) |line| {
+        if (std.mem.startsWith(u8, line, end_prefix)) by = line[end_prefix.len + 1 .. line.len - 2];
+        if (std.mem.eql(u8, line, start_line[0 .. start_line.len - 1])) by = null;
+    }
+    return by;
 }
 
 // Returns "<total>\n" then one undelivered note per line. Returns null after two seconds
