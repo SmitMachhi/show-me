@@ -23,7 +23,7 @@ pub fn ensureDaemon(init: std.process.Init) u16 {
     if (std.mem.eql(u8, info.version, state.version)) return info.port;
 
     // An older or newer daemon is up. Its state is on disk, so replace it.
-    _ = call(io, info.port, "POST", "/shutdown", &.{}) catch {};
+    _ = call(io, arena, info.port, "POST", "/shutdown", "") catch {};
     var tries: u32 = 0;
     while (running(io, d)) : (tries += 1) {
         if (tries == 400) state.fail("the running show-me daemon did not stop. End it, then retry.", .{});
@@ -47,8 +47,21 @@ fn waitInfo(io: Io, arena: std.mem.Allocator, d: Io.Dir) state.Info {
     state.fail("the daemon started but wrote no daemon.json. Run `show-me serve` to see why.", .{});
 }
 
+// Windows hands every inheritable handle to a child. Without this the daemon would keep
+// the caller's output pipe open, and a shell that captures `show-me open` would never
+// see the output end.
+fn keepStdioFromChild() void {
+    if (builtin.os.tag != .windows) return;
+    const w = std.os.windows;
+    for ([_]Io.File{ .stdin(), .stdout(), .stderr() }) |f| {
+        const flag: w.OBJECT.HANDLE_FLAG = .{ .INHERIT = false };
+        _ = w.ntdll.NtSetInformationObject(f.handle, .HandleFlag, &flag, @sizeOf(w.OBJECT.HANDLE_FLAG));
+    }
+}
+
 // Starts `show-me serve` detached and waits for its "ready" line.
 fn spawnDaemon(io: Io) void {
+    keepStdioFromChild();
     var path: [Io.Dir.max_path_bytes]u8 = undefined;
     const n = std.process.executablePath(io, &path) catch |e|
         state.fail("cannot find the show-me program path: {t}", .{e});
@@ -68,26 +81,33 @@ fn spawnDaemon(io: Io) void {
     }
 }
 
-// One HTTP request to the daemon. Returns the response body inside `buf`.
-pub fn call(io: Io, port: u16, method: []const u8, path: []const u8, buf: []u8) ![]const u8 {
+pub const Response = struct { status: u16, body: []const u8 };
+
+// One HTTP request to the daemon. Blocks until the daemon closes the connection.
+pub fn call(
+    io: Io,
+    arena: std.mem.Allocator,
+    port: u16,
+    method: []const u8,
+    path: []const u8,
+    body: []const u8,
+) !Response {
     const addr: net.IpAddress = try .parseIp4("127.0.0.1", port);
     const s = try addr.connect(io, .{ .mode = .stream });
     defer s.close(io);
     var out_buf: [512]u8 = undefined;
     var w = s.writer(io, &out_buf);
     try w.interface.print(
-        "{s} {s} HTTP/1.1\r\nHost: 127.0.0.1:{d}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-        .{ method, path, port },
+        "{s} {s} HTTP/1.1\r\nHost: 127.0.0.1:{d}\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n",
+        .{ method, path, port, body.len },
     );
+    try w.interface.writeAll(body);
     try w.interface.flush();
-    var in_buf: [8192]u8 = undefined;
+    var in_buf: [4096]u8 = undefined;
     var sr = s.reader(io, &in_buf);
-    const r = &sr.interface;
-    while (r.buffered().len < in_buf.len) r.fillMore() catch break;
-    const all = r.buffered();
+    const all = try sr.interface.allocRemaining(arena, .unlimited);
     const head_end = std.mem.find(u8, all, "\r\n\r\n") orelse return error.BadResponse;
-    const body = all[head_end + 4 ..];
-    const len = @min(body.len, buf.len);
-    @memcpy(buf[0..len], body[0..len]);
-    return buf[0..len];
+    if (all.len < 12) return error.BadResponse;
+    const status = std.fmt.parseInt(u16, all[9..12], 10) catch return error.BadResponse;
+    return .{ .status = status, .body = all[head_end + 4 ..] };
 }

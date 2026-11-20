@@ -3,6 +3,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const state = @import("state.zig");
+const reviews = @import("reviews.zig");
 const Io = std.Io;
 const net = Io.net;
 const Request = std.http.Server.Request;
@@ -23,9 +24,10 @@ pub fn serve(init: std.process.Init) !void {
         state.fail("cannot listen on 127.0.0.1:{d}: {t}. Set SHOW_ME_PORT to a free port.", .{ port, e });
     try state.writeInfo(io, d, port);
     stdout.writeStreamingAll(io, "ready\n") catch {};
+    var shared: reviews.Shared = .{ .io = io, .dir = d };
     while (true) {
         const s = server.accept(io) catch continue;
-        const t = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, handle, .{ io, s, port }) catch {
+        const t = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, handle, .{ &shared, s, port }) catch {
             s.close(io);
             continue;
         };
@@ -33,32 +35,75 @@ pub fn serve(init: std.process.Init) !void {
     }
 }
 
-fn handle(io: Io, s: net.Stream, port: u16) void {
-    defer s.close(io);
+fn handle(sh: *reviews.Shared, s: net.Stream, port: u16) void {
+    defer s.close(sh.io);
     var in_buf: [8192]u8 = undefined;
     var out_buf: [4096]u8 = undefined;
-    var in = s.reader(io, &in_buf);
-    var out = s.writer(io, &out_buf);
+    var in = s.reader(sh.io, &in_buf);
+    var out = s.writer(sh.io, &out_buf);
     var http = std.http.Server.init(&in.interface, &out.interface);
     var req = http.receiveHead() catch return;
-    route(&req, port) catch {};
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    route(sh, &req, port, arena.allocator()) catch {};
 }
 
-fn route(req: *Request, port: u16) !void {
-    if (!allowed(req, port)) {
-        return req.respond("forbidden\n", .{ .status = .forbidden, .keep_alive = false });
-    }
-    const target = req.head.target;
-    const path = target[0 .. std.mem.findScalar(u8, target, '?') orelse target.len];
+fn reply(req: *Request, status: std.http.Status, text: []const u8) !void {
+    return req.respond(text, .{ .status = status, .keep_alive = false });
+}
+
+fn route(sh: *reviews.Shared, req: *Request, port: u16, arena: std.mem.Allocator) !void {
+    if (!allowed(req, port)) return reply(req, .forbidden, "forbidden\n");
     const method = req.head.method;
-    if (method == .GET and std.mem.eql(u8, path, "/health")) {
-        return req.respond(state.version, .{ .keep_alive = false });
+    const target = req.head.target;
+    // Reading the body invalidates the head, so copy the path out first.
+    const path = try arena.dupe(u8, target[0 .. std.mem.findScalar(u8, target, '?') orelse target.len]);
+    var body: []const u8 = "";
+    if (method == .POST) {
+        var body_buf: [4096]u8 = undefined;
+        const r = try req.readerExpectContinue(&body_buf);
+        body = r.allocRemaining(arena, .limited(reviews.max_note_bytes)) catch
+            return reply(req, .payload_too_large, "body too large\n");
     }
+    if (method == .GET and std.mem.eql(u8, path, "/health")) return reply(req, .ok, state.version);
     if (method == .POST and std.mem.eql(u8, path, "/shutdown")) {
-        try req.respond("bye\n", .{ .keep_alive = false });
+        try reply(req, .ok, "bye\n");
         std.process.exit(0);
     }
-    return req.respond("not found\n", .{ .status = .not_found, .keep_alive = false });
+    if (method == .POST and std.mem.eql(u8, path, "/reviews")) {
+        const key = reviews.register(sh, arena, body) catch return reply(req, .bad_request, "bad path\n");
+        return reply(req, .ok, &key);
+    }
+    return routeReview(sh, req, arena, method, path, body);
+}
+
+// Routes of the form /<action>/<key>.
+fn routeReview(
+    sh: *reviews.Shared,
+    req: *Request,
+    arena: std.mem.Allocator,
+    method: std.http.Method,
+    path: []const u8,
+    body: []const u8,
+) !void {
+    const slash = std.mem.findScalarPos(u8, path, 1, '/') orelse return reply(req, .not_found, "not found\n");
+    const action = path[1..slash];
+    const key = reviews.parseKey(path[slash + 1 ..]) orelse return reply(req, .not_found, "not found\n");
+    if (!reviews.exists(sh, key)) return reply(req, .not_found, "no such review\n");
+    if (method == .GET and std.mem.eql(u8, action, "wait")) {
+        return reply(req, .ok, try reviews.wait(sh, arena, key));
+    }
+    if (method == .POST and std.mem.eql(u8, action, "send")) {
+        reviews.send(sh, arena, key, body) catch return reply(req, .bad_request, "body must be JSON\n");
+        return reply(req, .ok, "ok\n");
+    }
+    if (method == .POST and std.mem.eql(u8, action, "ack")) {
+        const n = std.fmt.parseInt(usize, std.mem.trim(u8, body, " \r\n"), 10) catch
+            return reply(req, .bad_request, "body must be a number\n");
+        try reviews.ack(sh, arena, key, n);
+        return reply(req, .ok, "ok\n");
+    }
+    return reply(req, .not_found, "not found\n");
 }
 
 // DNS-rebinding and cross-site guard: Host must name this server, and a request that
