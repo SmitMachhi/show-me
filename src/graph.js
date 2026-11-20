@@ -29,7 +29,7 @@
         "@keyframes showme-in{from{opacity:0;scale:.985}}" +
         "dialog.showme-full.leaving{opacity:0;scale:.985;transition:opacity .07s cubic-bezier(.22,1,.36,1),scale .07s cubic-bezier(.22,1,.36,1)}" +
         "dialog.showme-full>svg{width:100%;height:100%;cursor:grab;touch-action:none}" +
-        "dialog.showme-full[data-tool=draw]>svg{cursor:crosshair}dialog.showme-full[data-tool=pan] .showme-ink{display:none}" +
+        "dialog.showme-full[data-tool=draw]>svg{cursor:crosshair;user-select:none;-webkit-user-select:none}dialog.showme-full[data-tool=pan] .showme-ink{display:none}" +
         "dialog.showme-full nav{position:absolute;top:12px;right:12px;display:flex;gap:6px}" +
         "@media(prefers-reduced-motion:reduce){dialog.showme-full[open]{animation:none}.showme-btn{transition:none}}";
 
@@ -121,15 +121,18 @@
         const sync = () => { full.dataset.tool = tool; bar.sync(tool); };
         const ink = window.showmeDraw.attach(copy, () => tool === "draw", sync);
         const view = panZoom(copy, () => tool === "pan");
+        // True while one note card with words sits in this view. The view must then stay,
+        // or the words go with it. The card shakes to show why.
+        const holdsNote = () => full.querySelector("[data-showme-ui]") && window.showmeCard.busy();
         // Leaves the way it came, a little faster.
         const shut = () => {
-            if (ink.count() && !confirm("Discard the drawing?")) return;
+            if (holdsNote() || (ink.count() && !confirm("Discard the drawing?"))) return;
             full.classList.add("leaving");
             setTimeout(() => full.remove(), 70);
         };
-        // Hands the picture to the note card at the diagram in the page.
+        // Hands the picture to the note card: the one open here, or one new card at the diagram in the page.
         const add = () => ink.png().then((blob) => {
-            full.remove();
+            if (!holdsNote()) full.remove();
             window.showmePick(svg.parentNode, "drawing", ink.summary(), blob);
         }, () => alert("Couldn't add the drawing."));
         const bar = inkButtons(ink, () => { tool = tool === "draw" ? "pan" : "draw"; sync(); }, add);
