@@ -26,6 +26,7 @@ function quote(n) {
     let name = "pointer";
     let text = n.text ? n.text.slice(0, 80) : n.selector;
     if (n.node) [name, text] = ["graph", n.node];
+    else if (n.cell) [name, text] = ["table", [n.cell.row, n.cell.column].filter(Boolean).join(" / ")];
     else if (n.kind === "text") name = "text";
     else if (n.kind === "page") [name, text] = ["page", "Form answer"];
     else if (!n.selector) return null;

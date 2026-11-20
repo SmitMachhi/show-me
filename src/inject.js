@@ -48,6 +48,20 @@
         }
     }
 
+    // Names the row and column of one table cell, so the note still makes sense after the
+    // table is sorted or filtered. Returns null when merged cells make the names unsure.
+    function cellOf(el) {
+        const cell = el.closest("td,th");
+        const table = cell && cell.closest("table");
+        if (!table || table.querySelector("[colspan],[rowspan]")) return null;
+        const head = table.querySelector("tr");
+        const column = head.children[cell.cellIndex];
+        const row = cell.parentNode.children[0];
+        const clean = (c) => (c && c !== cell ? c.textContent.trim().slice(0, 60) : "");
+        const names = { row: clean(row), column: clean(head === cell.parentNode ? null : column) };
+        return names.row || names.column ? names : null;
+    }
+
     // Opens the note card at one element. `text` is its words, or the selected words.
     function pick(el, kind, text) {
         if (window.showmeCard.busy()) return;
@@ -55,6 +69,8 @@
         const title = part && part.querySelector("title");
         const note = { kind, selector: selectorOf(el), text: text.trim().slice(0, 500) };
         if (title) note.node = title.textContent;
+        const cell = cellOf(el);
+        if (cell) note.cell = cell;
         unmark("data-showme-picked");
         (part || el).setAttribute("data-showme-picked", "");
         const label = note.node || (kind === "text" ? "“" + note.text.slice(0, 60) + "”" : note.text.slice(0, 60) || note.selector);
