@@ -35,9 +35,9 @@ The lavish-axi list contains its help text. One list with no session has 10,493 
 
 | Event | show-me | lavish-axi |
 | --- | ---: | ---: |
-| Session start | 0 bytes | 10,493 bytes (the hook runs `lavish-axi`) |
-| Agent writes one page | 4,005 bytes (`SKILL.md`) | 1,820 bytes (`SKILL.md`), then 1,216 to 10,385 bytes for each playbook |
-| All text | 6,363 bytes (`SKILL.md`, `base.html`) | 59,232 bytes (`SKILL.md`, help, `design`, 8 playbooks) |
+| Session start | 0 bytes | 10,493 bytes with the optional hook from `lavish-axi setup hooks`, 0 bytes without |
+| Agent writes one page | 4,221 bytes (`SKILL.md`) | 1,820 bytes (`SKILL.md`), then 1,216 to 10,385 bytes for each playbook |
+| All text | 6,579 bytes (`SKILL.md`, `base.html`) | 59,232 bytes (`SKILL.md`, help, `design`, 8 playbooks) |
 
 ## Conditions
 
