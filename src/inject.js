@@ -1,13 +1,9 @@
 // Added to the reviewed page by show-me. Turns clicks and text selections into notes,
 // and follows orders from the review panel: annotate mode, reveal, restore scroll.
 // The page cannot read the panel: it runs in one sandboxed frame with no origin.
+// What one click points at (controls, table cells, queued notes) is in target.js.
 (function () {
-    // Elements that work as controls: clicks reach them and make no note. The same list
-    // as lavish, with the ARIA widget roles for controls built from plain elements.
-    const CONTROLS = "button,input,select,textarea,option,optgroup,label,summary," +
-        "[contenteditable]:not([contenteditable='false']),[data-showme-action],[data-showme-ui]," +
-        "[role=button],[role=checkbox],[role=combobox],[role=menuitem],[role=menuitemcheckbox]," +
-        "[role=menuitemradio],[role=option],[role=radio],[role=switch],[role=tab],[role=treeitem]";
+    const T = window.showmeTarget;
     const ACCENT = "#3657d6";
     const CSS_TEXT =
         "html{scrollbar-width:thin;scrollbar-color:#8886 transparent}" +
@@ -15,13 +11,12 @@
         "[data-showme-queued]:not(g){outline:2px dashed " + ACCENT + "99;outline-offset:2px}" +
         "g[data-showme-queued]>polygon,g[data-showme-queued]>path,g[data-showme-queued]>ellipse{stroke:" + ACCENT + ";stroke-dasharray:4 3}" +
         "[data-showme-picked]{outline:2px solid " + ACCENT + ";outline-offset:2px;box-shadow:0 0 0 6px " + ACCENT + "22}" +
+        "::highlight(showme){background-color:" + ACCENT + "33}" +
         "[data-showme-flash]{animation:showme-flash .6s steps(2,jump-none)}" +
         "@keyframes showme-flash{0%,50%{outline:3px solid " + ACCENT + ";outline-offset:3px;box-shadow:0 0 0 8px " + ACCENT + "33}}" +
         "@media(prefers-reduced-motion:reduce){[data-showme-flash]{animation-duration:.01s}}";
     const root = document.documentElement;
     let annotate = root.getAttribute("data-showme-annotate") !== "off";
-
-    const selectorOf = window.showmeSelector;
 
     function post(msg) {
         parent.postMessage(Object.assign({ source: "showme" }, msg), "*");
@@ -31,68 +26,46 @@
         for (const el of document.querySelectorAll("[" + attr + "]")) el.removeAttribute(attr);
     }
 
+    // Removes the mark of the note being written: the outline or the word highlight.
+    function unpick() {
+        unmark("data-showme-picked");
+        T.clearWords();
+    }
+
     function setMode(on) {
         annotate = on;
         root.toggleAttribute("data-showme-annotate", on);
         if (!on) {
             unmark("data-showme-hover");
-            unmark("data-showme-picked");
             window.showmeCard.close();
         }
     }
 
-    // Names the row and column of one table cell, so the note still makes sense after the
-    // table is sorted or filtered. Returns null when merged cells make the names unsure.
-    function cellOf(el) {
-        const cell = el.closest("td,th");
-        const table = cell && cell.closest("table");
-        if (!table || table.querySelector("[colspan],[rowspan]")) return null;
-        const head = table.querySelector("tr");
-        const column = head.children[cell.cellIndex];
-        const row = cell.parentNode.children[0];
-        const clean = (c) => (c && c !== cell ? c.textContent.trim().slice(0, 60) : "");
-        const names = { row: clean(row), column: clean(head === cell.parentNode ? null : column) };
-        return names.row || names.column ? names : null;
-    }
-
-    // Where queued notes point: [{ id, selector, node }] from the panel, without their words.
-    let anchors = [];
-
-    // The element one anchor points at: the diagram node by name, else the selector.
-    function anchored(a) {
-        if (a.node) return [...document.querySelectorAll("g.node,g.edge,g.cluster")].find((g) => g.querySelector("title")?.textContent === a.node);
-        try { return document.querySelector(a.selector); } catch (e) { return null; }
-    }
-
-    function markAnchors() {
-        unmark("data-showme-queued");
-        for (const a of anchors) anchored(a)?.setAttribute("data-showme-queued", "");
-    }
-
     // Opens the note card at one element. `text` is its words, or the selected words.
-    // `picture` is one image blob to attach. A card that already holds words gets the picture.
-    function pick(el, kind, text, picture) {
+    // `range` is the selection for text notes. `picture` is one image blob to attach.
+    // A card that already holds words keeps them and gets the picture.
+    function pick(el, kind, text, picture, range) {
         if (picture) setTimeout(() => post({ type: "image", blob: picture }));
         if (window.showmeCard.busy()) return;
         const part = el.closest("g.node,g.edge,g.cluster");
         const title = part && part.querySelector("title");
         // One full-window view shows a copy, which names the diagram in the page that it copies.
         const within = el.closest("dialog[data-of]");
-        const note = { kind, selector: within ? within.dataset.of : selectorOf(el), text: text.trim().slice(0, 500) };
+        const note = { kind, selector: within ? within.dataset.of : window.showmeSelector(el), text: text.trim().slice(0, 500) };
         if (title) note.node = title.textContent;
-        const cell = cellOf(el);
+        const cell = T.cellOf(el);
         if (cell) note.cell = cell;
         // One click on one element that holds one queued note edits that note in the panel.
-        const held = kind === "element" && anchors.find((a) => (note.node ? a.node === note.node : a.selector === note.selector));
+        const held = kind === "element" && T.heldBy(note);
         if (held) return post({ type: "edit", id: held.id });
-        unmark("data-showme-picked");
-        (part || el).setAttribute("data-showme-picked", "");
+        window.showmeCard.close(); // clears the mark of one earlier card
+        unpick();
+        if (!(range && T.markWords(range))) (part || el).setAttribute("data-showme-picked", "");
         const label = note.node || (kind === "text" ? "“" + note.text.slice(0, 60) + "”" : note.text.slice(0, 60) || note.selector);
-        const card = window.showmeCard;
-        card.open({ label, rect: (part || el).getBoundingClientRect(), within }, (words, sendNow, images) => {
-            unmark("data-showme-picked");
+        const target = { label, rect: (part || el).getBoundingClientRect(), within };
+        window.showmeCard.open(target, (words, sendNow, images) => {
             post(Object.assign({ type: "note", note: words, sendNow }, images.length ? { images } : {}, note));
-        }, (file) => post({ type: "image", blob: file }));
+        }, (file) => post({ type: "image", blob: file }), unpick);
     }
 
     function reveal(selector) {
@@ -112,20 +85,15 @@
 
     addEventListener("mouseover", (e) => {
         unmark("data-showme-hover");
-        if (annotate && !e.target.closest(CONTROLS)) e.target.setAttribute("data-showme-hover", "");
+        if (annotate && !e.target.closest(T.CONTROLS)) e.target.setAttribute("data-showme-hover", "");
     }, true);
-
-    // True for one link to another document. Same-page "#part" links stay in the frame.
-    function leaves(link) {
-        return !(link.getAttribute("href") || "").startsWith("#") && link.href.split("#")[0] !== location.href.split("#")[0];
-    }
 
     addEventListener("click", (e) => {
         const link = e.target.closest("a[href]");
-        const control = e.target.closest(CONTROLS);
+        const control = e.target.closest(T.CONTROLS);
         // A link never takes the review frame away. In annotate mode one plain click makes
         // one note on it; Ctrl or Cmd click, and any click in explore mode, open one new tab.
-        if (link && leaves(link) && (!annotate || e.ctrlKey || e.metaKey || control)) {
+        if (link && T.leaves(link) && (!annotate || e.ctrlKey || e.metaKey || control)) {
             e.preventDefault();
             window.open(link.href, "_blank", "noopener");
             return;
@@ -149,8 +117,10 @@
         const sel = getSelection();
         const text = String(sel).trim();
         if (!annotate || !text || e.target.closest("[data-showme-ui]")) return;
-        const node = sel.getRangeAt(0).commonAncestorContainer;
-        pick(node.nodeType === 1 ? node : node.parentElement, "text", text);
+        // Copy the range now: the card takes focus next, and the selection may go.
+        const range = sel.getRangeAt(0).cloneRange();
+        const node = range.commonAncestorContainer;
+        pick(node.nodeType === 1 ? node : node.parentElement, "text", text, null, range);
     });
 
     // Ctrl+I or Cmd+I switches between annotate and explore, from inside the page too.
@@ -175,7 +145,7 @@
         if (m.type === "reveal") reveal(m.selector);
         if (m.type === "restore") scrollTo(0, m.y);
         if (m.type === "imageDone") window.showmeCard.addImage(m.id, m.url);
-        if (m.type === "anchors") { anchors = m.items; markAnchors(); }
+        if (m.type === "anchors") T.setAnchors(m.items);
     });
 
     window.showmePick = pick; // graph.js calls this with one drawing

@@ -1,7 +1,8 @@
 // Added to the reviewed page by show-me. The note card: one small box that opens at the
 // element the reviewer clicked, so they type where they point. It lives in its own
 // shadow root, so page styles cannot reach it and its styles cannot leak out.
-// Exposes window.showmeCard = { open(target, onQueue, onImage), close(), busy(), addImage() }.
+// Exposes window.showmeCard = { open(target, onQueue, onImage, onClose), close(), busy(), addImage() }.
+// `onClose` runs once when the card goes, for any reason: Add, Cancel, Esc or one new card.
 // `target` is { label, rect, within }: `within` is the open full-window view, or null.
 (function () {
     const CSS_TEXT =
@@ -33,12 +34,16 @@
     let area = null;
     let pics = [];
     let strip = null;
+    let closing = null;
 
     function close() {
+        const done = closing;
+        closing = null;
         if (host) host.remove();
         host = null;
         area = null;
         pics = [];
+        if (done) done();
     }
 
     // Places the card under the target, or above it when there is no room below.
@@ -71,8 +76,9 @@
 
     // `onQueue(words, sendNow, pictureIds)` runs when the reviewer queues the note.
     // `onImage(file)` runs for each pasted picture; the panel uploads it, then calls addImage.
-    function open(target, onQueue, onImage) {
+    function open(target, onQueue, onImage, onClose) {
         close();
+        closing = onClose || null;
         host = document.createElement("div");
         host.setAttribute("data-showme-ui", "");
         const root = host.attachShadow({ mode: "closed" });
