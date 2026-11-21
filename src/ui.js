@@ -8,12 +8,12 @@ import { createChanges } from "/ui-changes.js";
 import { parseLog } from "/ui-log.js";
 import { createLayout } from "/ui-layout.js";
 import { createAnchors } from "/ui-anchors.js";
+import { connect } from "/ui-stream.js";
 
 const key = location.pathname.split("/").pop();
 const el = (id) => document.getElementById(id);
 const page = el("page");
 const note = el("note");
-const AGENT = { nobody: "Agent offline", listening: "Agent online", working: "Agent busy" };
 const saved = (name, fallback) => {
     try { return JSON.parse(sessionStorage.getItem("showme:" + name + ":" + key)) ?? fallback; } catch (e) { return fallback; }
 };
@@ -71,7 +71,7 @@ function render() {
         reveal,
         url: images.url,
         remove: () => { queue.splice(i, 1); render(); },
-        save: (text) => { if (text) Object.assign(n, { note: text, id: newId() }); else queue.splice(i, 1); render(); },
+        save: (text) => { edited(i, text); render(); },
     })));
     // Rows that were not there at the last render slide in. The first render does not move.
     const added = rowCount >= 0 && rows.length > rowCount;
@@ -86,6 +86,17 @@ function render() {
     bar.setBadge(queue.length, unseenReply);
     bar.setEnded(ended);
     anchors.sync();
+}
+
+
+// Saves the words of queued note i. The note gets one new id only when its words change,
+// so the daemon stores one changed note again but never one unchanged note twice.
+// One note with pictures keeps them when its words are cleared; one empty note goes.
+function edited(i, text) {
+    const n = queue[i];
+    if (text === n.note) return;
+    if (text || (n.images && n.images.length)) Object.assign(n, { note: text, id: newId() });
+    else queue.splice(i, 1);
 }
 
 function reveal(selector) {
@@ -174,21 +185,6 @@ note.onkeydown = (e) => {
     send(false);
 };
 
-// When the daemon goes away, say so. When it comes back it may be a newer build, so reload.
-const stream = new EventSource("/events/" + key);
-let lost = null;
-stream.onerror = () => {
-    lost = lost || setTimeout(() => showBanner("show-me isn't running. Run show-me open again."), 3000);
-};
-stream.onopen = () => {
-    if (lost) location.reload();
-};
-stream.onmessage = (e) => {
-    if (e.data === "reload") reloadPage();
-    if (e.data === "log") loadLog();
-    if (!e.data.startsWith("presence ")) return;
-    el("agent").dataset.state = e.data.slice(9);
-    el("agent").lastElementChild.textContent = AGENT[e.data.slice(9)] || "";
-};
+connect(key, { reload: reloadPage, log: loadLog, banner: showBanner });
 page.src = "/a/" + key + "/";
 loadLog();
