@@ -9,49 +9,57 @@ import { initSketch } from "/ui-sketch.js";
 const el = (id) => document.getElementById(id);
 const MAX_PER_NOTE = 4;
 
-export function createImages(key, onChange) {
-    let chips = [];
+// The composer's chips. createImages fills in the key and the change callback.
+const box = { key: "", onChange: () => {}, chips: [] };
 
-    // Resolves to { id } or to { error } with the reason in words.
-    async function upload(blob) {
-        const r = await fetch("/image/" + key, { method: "POST", body: blob }).catch(() => null);
-        if (r && r.ok) return { id: await r.text() };
-        return { error: !r ? "show-me isn't running." : r.status === 413 ? "It's over 10 MB." : "Use PNG, JPEG or WebP." };
+// Resolves to { id } or to { error } with the reason in words.
+async function upload(blob) {
+    const r = await fetch("/image/" + box.key, { method: "POST", body: blob }).catch(() => null);
+    if (r && r.ok) return { id: await r.text() };
+    return { error: !r ? "show-me isn't running." : r.status === 413 ? "It's over 10 MB." : "Use PNG, JPEG or WebP." };
+}
+
+const url = (id) => "/image/" + box.key + "/" + id;
+
+async function send(chip) {
+    chip.state = "uploading";
+    draw();
+    const r = await upload(chip.file);
+    Object.assign(chip, r.id ? { state: "ready", id: r.id } : { state: "failed", error: r.error });
+    draw();
+}
+
+function add(files) {
+    for (const file of files) {
+        if (!file.type.startsWith("image/") || box.chips.length >= MAX_PER_NOTE) continue;
+        const chip = { state: "uploading", file, src: URL.createObjectURL(file) };
+        box.chips.push(chip);
+        send(chip);
     }
+    draw();
+}
 
-    function url(id) {
-        return "/image/" + key + "/" + id;
-    }
+function remove(chip) {
+    box.chips = box.chips.filter((c) => c !== chip);
+    URL.revokeObjectURL(chip.src);
+    draw();
+}
 
-    async function send(chip) {
-        chip.state = "uploading";
-        draw();
-        const r = await upload(chip.file);
-        Object.assign(chip, r.id ? { state: "ready", id: r.id } : { state: "failed", error: r.error });
-        draw();
-    }
+function draw() {
+    el("thumbs").replaceChildren(...box.chips.map((c) => thumb(c.src, () => remove(c), c, () => send(c))));
+    box.onChange();
+}
 
-    function add(files) {
-        for (const file of files) {
-            if (!file.type.startsWith("image/") || chips.length >= MAX_PER_NOTE) continue;
-            const chip = { state: "uploading", file, src: URL.createObjectURL(file) };
-            chips.push(chip);
-            send(chip);
-        }
-        draw();
-    }
+// Hands over the ids of the composer's pictures and clears them.
+function take() {
+    const ids = box.chips.map((c) => c.id);
+    box.chips.forEach((c) => URL.revokeObjectURL(c.src));
+    box.chips = [];
+    draw();
+    return ids;
+}
 
-    function remove(chip) {
-        chips = chips.filter((c) => c !== chip);
-        URL.revokeObjectURL(chip.src);
-        draw();
-    }
-
-    function draw() {
-        el("thumbs").replaceChildren(...chips.map((c) => thumb(c.src, () => remove(c), c, () => send(c))));
-        onChange();
-    }
-
+function listen() {
     el("attach").onclick = () => el("file").click();
     initSketch(el("sketch"), (blob) => add([blob]));
     el("file").onchange = () => { add([...el("file").files]); el("file").value = ""; };
@@ -65,21 +73,18 @@ export function createImages(key, onChange) {
     const files = (e) => e.dataTransfer && e.dataTransfer.types.includes("Files");
     addEventListener("dragover", (e) => { if (files(e)) e.preventDefault(); });
     addEventListener("drop", (e) => { if (files(e)) e.preventDefault(); });
+}
 
+export function createImages(key, onChange) {
+    Object.assign(box, { key, onChange });
+    listen();
     return {
         upload,
         url,
-        count: () => chips.length,
+        take,
+        count: () => box.chips.length,
         // True when every chip is ready, so the message can go.
-        ready: () => chips.every((c) => c.state === "ready"),
-        // Hands over the ids of the composer's pictures and clears them.
-        take() {
-            const ids = chips.map((c) => c.id);
-            chips.forEach((c) => URL.revokeObjectURL(c.src));
-            chips = [];
-            draw();
-            return ids;
-        },
+        ready: () => box.chips.every((c) => c.state === "ready"),
     };
 }
 
