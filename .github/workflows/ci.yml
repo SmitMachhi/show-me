@@ -50,15 +50,14 @@ jobs:
           if [ "${{ matrix.archive }}" = "zip" ]; then unzip -q zig.archive; else tar -xf zig.archive; fi
           echo "$PWD/$name" >> "$GITHUB_PATH"
 
-      # Runs the one-command installer as a new user does. It downloads the latest release,
-      # so this step tests the installer script and gives the later steps Graphviz.
+      # Runs the installer the way `npx show-me-cli` does: install.js starts install.ps1 or
+      # install.sh. It downloads the latest release, so this step tests the installer and
+      # gives the later steps Graphviz.
       - name: Installer
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            powershell -NoProfile -Command 'iex (Get-Content -Raw install.ps1); show-me --version'
-          else
-            sh install.sh && "$HOME/.local/bin/show-me" --version && dot -V
-          fi
+          node install.js
+          "$HOME/.local/bin/show-me" --version
+          if [ "$RUNNER_OS" != "Windows" ]; then dot -V; fi
 
       - name: Unit tests
         run: |

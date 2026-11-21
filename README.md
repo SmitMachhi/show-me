@@ -24,12 +24,24 @@ Windows, in PowerShell:
 irm https://raw.githubusercontent.com/SmitMachhi/show-me/master/install.ps1 | iex
 ```
 
-The command does these steps:
+With Node or Bun, on each system:
+
+```sh
+npx show-me-cli
+```
+
+```sh
+bunx show-me-cli
+```
+
+Each command does these steps:
 
 1. Downloads the program to `~/.local/bin`.
 2. Writes the agent skill to `~/.claude/skills/show-me`.
 3. Installs Graphviz with the system package manager, if Graphviz is not installed.
 4. Adds `~/.local/bin` to the PATH, if the PATH does not contain that folder.
+
+The npm package contains the installer only. The program goes on the PATH as one native file, because one npm or Bun command shim adds 12 ms to 260 ms to each command on Windows.
 
 Downloads are available for Windows x86-64, Linux x86-64 and macOS on Apple silicon. For other systems, build from source: install Zig 0.17.1 and run this command:
 

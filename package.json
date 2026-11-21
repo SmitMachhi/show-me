@@ -1,0 +1,9 @@
+{
+  "name": "show-me-cli",
+  "version": "1.0.0",
+  "description": "Installs show-me: visual pages with diagrams that one agent writes and one person reviews in the browser.",
+  "bin": { "show-me-cli": "install.js" },
+  "files": ["install.js", "install.sh", "install.ps1"],
+  "repository": "github:SmitMachhi/show-me",
+  "license": "MIT"
+}
