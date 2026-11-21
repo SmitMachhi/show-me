@@ -38,7 +38,7 @@ const images = createImages(key, () => render());
 const changes = createChanges(key, tell);
 const anchors = createAnchors(tell, () => queue.items);
 const drafts = createDrafts(key, tell);
-const layout = createLayout(tell, (issues) => {
+const layout = createLayout(key, tell, (issues) => {
     queue.add({ kind: "layout", note: "Fix these layout issues.", issues });
     render();
 });

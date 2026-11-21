@@ -136,9 +136,13 @@ textarea { display: block; flex: 1; min-width: 0; padding: 6px 4px; border: 0; o
 /* Layout problems the page found in itself. Same shape as the change count, in the warning color. */
 #layout { height: 24px; padding: 0 10px; border-radius: 12px; background: color-mix(in srgb, var(--busy) 18%, transparent); color: var(--busy); font-size: 12px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 #layoutMenu { top: 32px; width: 280px; max-height: 60vh; overflow: auto; }
-#layoutMenu button { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#layoutMenu .issue { display: flex; align-items: center; gap: 2px; }
+#layoutMenu .issue input { flex: none; margin: 0 4px 0 8px; accent-color: var(--accent); }
+#layoutMenu .issue button:not(.dismiss) { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#layoutMenu .dismiss { flex: none; width: auto; color: var(--muted); font-size: 12px; }
+#layoutMenu .primary:disabled { opacity: 0.4; cursor: default; }
 #layoutMenu small { display: block; color: var(--muted); }
-#layoutMenu .primary { margin-top: 4px; text-align: center; background: var(--accent); color: var(--on-accent); }
+#layoutMenu .primary { margin-top: 4px; justify-content: center; background: var(--accent); color: var(--on-accent); }
 #layoutMenu .primary:hover { background: var(--accent); color: var(--on-accent); opacity: 0.9; }
 #sketchPad { width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: #fff; }
 #sketchPad[open] { animation: pop 0.09s var(--ease); }

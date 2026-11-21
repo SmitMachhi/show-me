@@ -87,7 +87,7 @@ show-me wait plan.html --reply "Title fixed"  # shows the reply, then waits agai
 - The pen button on each diagram lets the reviewer draw on the diagram. The note contains the drawing as one image and the names of the nodes below the strokes.
 - The pen button in the chat opens one blank sheet for one sketch. The message contains the sketch as one image.
 - The green number shows the changes since the last sent note. One click goes to the next change.
-- The amber number shows layout problems that the page found. One click sends all problems to the agent.
+- The amber number shows layout problems that the page found: content wider than the page, text or controls that are cut off or off the page, and text that one box covers. One click lists them. Tick the problems to fix and press "Fix selected", or dismiss one. One problem found again after one fix says "Still there".
 - The disk keeps each note until the agent reads the note. If the agent command stops, the notes stay safe.
 
 ## Diagrams
