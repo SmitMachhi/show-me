@@ -124,3 +124,7 @@ body="$(curl -s "$base/a/$key/")"
 mv "$page.gone" "$page"
 echo "$body" | grep -q "missing" || fail "no missing-file message: $body"
 echo "$body" | grep -q "plan.html" || fail "the message does not name the file"
+
+step "one browser request cannot wait"
+code="$(curl -s -o /dev/null -w '%{http_code}' -H 'Sec-Fetch-Site: same-origin' "$base/wait/$key")"
+test "$code" = 403 || fail "one browser request to /wait got $code"

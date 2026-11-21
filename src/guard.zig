@@ -4,8 +4,9 @@
 const std = @import("std");
 const Request = std.http.Server.Request;
 
-// command: no Origin header, so it is the show-me program or one local tool.
-// browser: the review page, served by this daemon.
+// command: no Origin, Referer or Sec-Fetch-* header, so it is the show-me program or
+// one local tool. Browsers send at least one of them, also from one sandboxed page.
+// browser: any request one browser sent: the review page, or the page under review.
 pub const Caller = enum { refused, command, browser };
 
 pub fn caller(req: *const Request, port: u16) Caller {
@@ -23,6 +24,8 @@ pub fn caller(req: *const Request, port: u16) Caller {
             const site = if (std.mem.startsWith(u8, h.value, "http://")) h.value[7..] else "";
             has_origin = true;
             origin_ok = std.mem.eql(u8, site, a) or std.mem.eql(u8, site, b);
+        } else if (std.ascii.eqlIgnoreCase(h.name, "referer") or std.ascii.startsWithIgnoreCase(h.name, "sec-fetch-")) {
+            has_origin = true;
         }
     }
     if (!host_ok) return .refused;

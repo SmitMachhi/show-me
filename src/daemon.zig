@@ -129,7 +129,11 @@ fn get(c: Call, action: []const u8, key: reviews.Key) !void {
     if (is(action, "events")) return events.serve(c.sh, c.req, c.arena, key);
     if (is(action, "log")) return reply(c.req, .ok, try reviews.readLog(c.sh, c.arena, key));
     if (is(action, "export")) return pages.download(c.sh, c.req, c.arena, key);
-    if (is(action, "wait")) return delivery.serve(c.sh, c.req, c.arena, key);
+    // Only the agent's command may wait: one page in the browser must not take over.
+    if (is(action, "wait")) {
+        if (c.from != .command) return reply(c.req, .forbidden, "wait is for the show-me command\n");
+        return delivery.serve(c.sh, c.req, c.arena, key);
+    }
     return reply(c.req, .not_found, "not found\n");
 }
 
