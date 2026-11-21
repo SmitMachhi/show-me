@@ -30,6 +30,11 @@ dupes="$(grep -ohE 'id="[A-Za-z][A-Za-z0-9_-]*"|\.id = "[A-Za-z][A-Za-z0-9_-]*"'
     sed -E 's/.*"(.*)"/\1/' | sort | uniq -d)"
 if [ -n "$dupes" ]; then echo "used twice: $dupes"; exit 1; fi
 
+echo "== no indefinite articles in the README and the skill"
+# The owner's writing rule. The DOT examples hold no "a" or "an" as one word.
+arts="$(grep -nwiE 'a|an' README.md src/skill/SKILL.md || true)"
+if [ -n "$arts" ]; then echo "$arts"; exit 1; fi
+
 echo "== smoke test"
 bash test/smoke.sh "$exe"
 echo "all checks passed"

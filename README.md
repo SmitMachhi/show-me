@@ -63,9 +63,15 @@ show-me wait plan.html --reply "Title fixed"  # shows the reply, then waits agai
 | --- | --- |
 | `show-me` | Shows each review and the number of unread notes |
 | `show-me check <file>` | Draws the diagrams and applies the writing rules |
-| `show-me reply <file> "text"` | Shows one reply in the chat |
+| `show-me reply <file> "text"` | Shows one reply in the chat. `--file <path>` reads the reply from one file |
 | `show-me end <file>` | Ends the review |
-| `show-me export <file>` | Writes one file that opens without show-me |
+| `show-me export <file>` | Writes one file that opens without show-me, then names each local file that it could not include |
+
+`wait` has these rules:
+
+- One review has one listener. The newest `wait` takes over, and each older `wait` stops with one message.
+- One note that the browser sends two times arrives one time.
+- When no browser tab shows the review for 20 seconds, `wait` prints `{"kind":"closed"}` and stops.
 | `show-me setup [folder]` | Writes the agent skill |
 | `show-me stop` | Stops the background daemon |
 

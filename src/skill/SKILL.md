@@ -17,10 +17,12 @@ Needs the `show-me` program on PATH. Diagrams need Graphviz.
 2. `show-me open <file>` checks the page, shows it in the browser and returns at once. If it prints problems, fix each line and run it again.
 3. `show-me wait <file>` blocks until the person sends notes. Run it in the foreground. It prints one JSON note per line.
 4. Edit the file. The browser reloads it.
-5. `show-me wait <file> --reply "what changed"` shows your reply and waits again. Go to step 4.
+5. `show-me wait <file> --reply "what changed"` shows your reply and waits again. Go to step 4. For one reply with several lines, write the reply to one file and use `--reply-file <path>`.
 
 If `wait` is stopped by one time limit, run the same command again. No note is lost.
+If `wait` says another wait took over, stop: one other agent listens to this review.
 The note `{"kind":"end"}` means the person ended the review. Stop, and answer in chat. Do not open that file again unless they ask; then use `show-me open <file> --reopen`.
+The note `{"kind":"closed"}` means no browser tab shows the review. Ask the person in chat whether to open it again or end it. Do not wait again until they answer.
 When you finish first, run `show-me end <file>`.
 `show-me export <file>` writes one file that opens without show-me, for sharing.
 `show-me` alone lists every review and its unread notes. Use it to resume one.
