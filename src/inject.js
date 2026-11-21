@@ -63,9 +63,11 @@
         if (!(range && T.markWords(range))) (part || el).setAttribute("data-showme-picked", "");
         const label = note.node || (kind === "text" ? "“" + note.text.slice(0, 60) + "”" : note.text.slice(0, 60) || note.selector);
         const target = { label, rect: (part || el).getBoundingClientRect(), within };
+        // The panel keeps the card's words while they are unsent, so one reload keeps them.
+        const draft = (words) => post({ type: "draft", card: words ? Object.assign({ words }, note) : null });
         window.showmeCard.open(target, (words, sendNow, images) => {
             post(Object.assign({ type: "note", note: words, sendNow }, images.length ? { images } : {}, note));
-        }, (file) => post({ type: "image", blob: file }), unpick);
+        }, (file) => post({ type: "image", blob: file }), () => { unpick(); draft(""); }, draft);
     }
 
     function reveal(selector) {

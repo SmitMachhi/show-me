@@ -11,6 +11,7 @@ import { createAnchors } from "/ui-anchors.js";
 import { connect } from "/ui-stream.js";
 import { watchTabs } from "/ui-tabs.js";
 import { createQueue } from "/ui-queue.js";
+import { createDrafts } from "/ui-drafts.js";
 
 const key = location.pathname.split("/").pop();
 const el = (id) => document.getElementById(id);
@@ -36,6 +37,7 @@ let unseenReply = false;
 const images = createImages(key, () => render());
 const changes = createChanges(key, tell);
 const anchors = createAnchors(tell, () => queue.items);
+const drafts = createDrafts(key, tell);
 const layout = createLayout(tell, (issues) => {
     queue.add({ kind: "layout", note: "Fix these layout issues.", issues });
     render();
@@ -136,6 +138,7 @@ addEventListener("message", (e) => {
     if (e.source !== page.contentWindow || !m || m.source !== "showme") return;
     changes.onMessage(m);
     layout.onMessage(m);
+    drafts.onMessage(m);
     if (m.type === "ready") {
         bar.setTitle(m.title);
         setMode(saved("mode", m.annotate));

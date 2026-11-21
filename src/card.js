@@ -1,7 +1,8 @@
 // Added to the reviewed page by show-me. The note card: one small box that opens at the
 // element the reviewer clicked, so they type where they point. It lives in its own
 // shadow root, so page styles cannot reach it and its styles cannot leak out.
-// Exposes window.showmeCard = { open(target, onQueue, onImage, onClose), close(), busy(), addImage() }.
+// Exposes window.showmeCard = { open(target, onQueue, onImage, onClose, onDraft), close(), busy(),
+// addImage(), fail(), setWords() }. `onDraft(words)` runs on each edit of the words.
 // `onClose` runs once when the card goes, for any reason: Add, Cancel, Esc or one new card.
 // `target` is { label, rect, within }: `within` is the open full-window view, or null.
 (function () {
@@ -77,7 +78,7 @@
 
     // `onQueue(words, sendNow, pictureIds)` runs when the reviewer queues the note.
     // `onImage(file)` runs for each pasted picture; the panel uploads it, then calls addImage.
-    function open(target, onQueue, onImage, onClose) {
+    function open(target, onQueue, onImage, onClose, onDraft) {
         close();
         closing = onClose || null;
         host = document.createElement("div");
@@ -103,6 +104,7 @@
         root.querySelector(".no").onclick = close;
         root.querySelector(".go").onclick = () => queue(false);
         takeImages(root, onImage);
+        area.oninput = () => onDraft && onDraft(area.value);
         area.onkeydown = (e) => {
             e.stopPropagation();
             if (e.key === "Escape") e.preventDefault(); // Esc must not also close the full-window view
@@ -145,5 +147,10 @@
         small.className = "err";
     }
 
-    window.showmeCard = { open, close, busy, addImage, fail };
+    // Puts words back into the open card, after one reload of the page.
+    function setWords(text) {
+        if (area) area.value = text;
+    }
+
+    window.showmeCard = { open, close, busy, addImage, fail, setWords };
 })();
