@@ -4,3 +4,4 @@ e/
 zig-out/
 .zig-cache/
 .show-me/
+.dev/
