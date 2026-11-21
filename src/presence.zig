@@ -70,6 +70,44 @@ pub fn deliveredUnanswered(log: []const u8) bool {
     return result;
 }
 
+const working_line = "{\"t\":\"working\"}";
+
+// True when notes were delivered, no reply came after them, and no working line either.
+fn needsWorking(log: []const u8) bool {
+    var result = false;
+    var lines = std.mem.splitScalar(u8, log, '\n');
+    while (lines.next()) |line| {
+        if (std.mem.startsWith(u8, line, reviews.ack_prefix)) result = true;
+        if (std.mem.startsWith(u8, line, reviews.reply_prefix) or std.mem.eql(u8, line, working_line)) result = false;
+    }
+    return result;
+}
+
+// Called when the page file changes. The first change after delivery means the agent
+// works on the notes: one working line goes into the log, so each note shows "Working".
+// Every open tab watches the file, so the check and the write share one lock.
+pub fn markWorking(sh: *Shared, key: Key) void {
+    var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    sh.mutex.lockUncancelable(sh.io);
+    defer sh.mutex.unlock(sh.io);
+    const log = reviews.readLog(sh, arena, key) catch return;
+    if (!needsWorking(log)) return;
+    const stamp = reviews.stamp(sh, arena) catch return;
+    reviews.appendLocked(sh, key, std.mem.concat(arena, u8, &.{ stamp, working_line ++ "\n" }) catch return) catch {};
+}
+
+test "one working line between delivery and reply" {
+    const ack = reviews.ack_prefix ++ "1}\n";
+    const reply = reviews.reply_prefix ++ "\"done\"}\n";
+    try std.testing.expect(!needsWorking(""));
+    try std.testing.expect(needsWorking(ack));
+    try std.testing.expect(!needsWorking(ack ++ working_line ++ "\n"));
+    try std.testing.expect(!needsWorking(ack ++ reply));
+    try std.testing.expect(needsWorking(ack ++ working_line ++ "\n" ++ reply ++ ack));
+}
+
 test "working only between delivery and reply" {
     const ack = reviews.ack_prefix ++ "1}\n";
     const reply = reviews.reply_prefix ++ "\"done\"}\n";

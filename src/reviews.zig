@@ -4,6 +4,8 @@
 // before its ack gets them again, so delivery is at-least-once and nothing is lost.
 // One {"t":"id","v":..} line comes before each note the browser gave one id, so the
 // same note sent twice (one retry after one lost answer) is stored once.
+// One {"t":"at","ms":..} line comes before each later event: its time in Unix ms.
+// One {"t":"working"} line says the page file changed after delivery (presence.zig).
 // Limits: one changed log is reread whole, and all reviews share one wake-up signal.
 const std = @import("std");
 const presence = @import("presence.zig");
@@ -90,7 +92,18 @@ fn append(sh: *Shared, key: Key, lines: []const u8) !void {
     try appendLocked(sh, key, lines);
 }
 
-fn appendLocked(sh: *Shared, key: Key, lines: []const u8) !void {
+// The time line that goes before one event.
+pub fn stamp(sh: *Shared, arena: std.mem.Allocator) ![]const u8 {
+    const ms = @divFloor(Io.Clock.now(.real, sh.io).nanoseconds, std.time.ns_per_ms);
+    return std.fmt.allocPrint(arena, "{{\"t\":\"at\",\"ms\":{d}}}\n", .{ms});
+}
+
+// Appends one event after its time line.
+fn appendStamped(sh: *Shared, arena: std.mem.Allocator, key: Key, lines: []const u8) !void {
+    try append(sh, key, try std.mem.concat(arena, u8, &.{ try stamp(sh, arena), lines }));
+}
+
+pub fn appendLocked(sh: *Shared, key: Key, lines: []const u8) !void {
     const f = try sh.dir.createFile(sh.io, &logName(key), .{ .truncate = false });
     defer f.close(sh.io);
     try f.writePositionalAll(sh.io, lines, try f.length(sh.io));
@@ -131,24 +144,24 @@ pub fn send(sh: *Shared, arena: std.mem.Allocator, key: Key, body: []const u8) !
         try lines.appendSlice(arena, id);
         try lines.appendSlice(arena, note);
     }
-    if (lines.items.len > 0) try appendLocked(sh, key, lines.items);
+    if (lines.items.len > 0) try appendLocked(sh, key, try std.mem.concat(arena, u8, &.{ try stamp(sh, arena), lines.items }));
     sh.changed.broadcast(sh.io);
 }
 
 pub fn ack(sh: *Shared, arena: std.mem.Allocator, key: Key, n: usize) !void {
-    try append(sh, key, try std.fmt.allocPrint(arena, "{s}{d}}}\n", .{ ack_prefix, n }));
+    try appendStamped(sh, arena, key, try std.fmt.allocPrint(arena, "{s}{d}}}\n", .{ ack_prefix, n }));
 }
 
 pub fn reply(sh: *Shared, arena: std.mem.Allocator, key: Key, text: []const u8) !void {
     const json = try std.json.Stringify.valueAlloc(arena, text, .{});
-    try append(sh, key, try std.fmt.allocPrint(arena, "{s}{s}}}\n", .{ reply_prefix, json }));
+    try appendStamped(sh, arena, key, try std.fmt.allocPrint(arena, "{s}{s}}}\n", .{ reply_prefix, json }));
 }
 
 // Ends the review. When the reviewer ends it, the agent learns of it as one last note.
 pub fn end(sh: *Shared, arena: std.mem.Allocator, key: Key, by_reviewer: bool) !void {
     const who = if (by_reviewer) "reviewer" else "agent";
     const last = if (by_reviewer) note_prefix ++ "{\"kind\":\"end\",\"note\":\"The reviewer ended the review.\"}}\n" else "";
-    try append(sh, key, try std.fmt.allocPrint(arena, "{s}{s}\"{s}\"}}\n", .{ last, end_prefix, who }));
+    try appendStamped(sh, arena, key, try std.fmt.allocPrint(arena, "{s}{s}\"{s}\"}}\n", .{ last, end_prefix, who }));
     sh.changed.broadcast(sh.io);
 }
 

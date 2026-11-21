@@ -153,7 +153,10 @@ pub fn events(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key:
         try body.flush();
         Io.sleep(sh.io, .{ .nanoseconds = 200 * std.time.ns_per_ms }, .awake) catch return;
         const next = Watch.now(sh, key, file, last);
-        if (next.file_time != last.file_time) try out.writeAll("data: reload\n\n");
+        if (next.file_time != last.file_time) {
+            presence.markWorking(sh, key);
+            try out.writeAll("data: reload\n\n");
+        }
         if (next.log_size != last.log_size) try out.writeAll("data: log\n\n");
         if (next.state != last.state) try out.print("data: presence {t}\n\n", .{next.state});
         // The comment line every 5 s is how one closed tab gets noticed.

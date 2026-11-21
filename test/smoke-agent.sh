@@ -81,3 +81,23 @@ head -1 "$dir/export.out" | grep -q "e.export.html" || fail "the first line is n
 has "$dir/export.out" "gone.css" || fail "gone.css is not reported"
 has "$dir/export.out" "nope.png" || fail "nope.png is not reported"
 if has "$dir/export.out" "x.example"; then fail "one remote file was reported as missing"; fi
+
+step "one file edit after delivery writes one working line, even with two tabs"
+curl -sN "$base/events/$key" > /dev/null & t1=$!
+curl -sN "$base/events/$key" > /dev/null & t2=$!
+send '{"kind":"message","note":"edit the title"}'
+wait_once "$dir/w8.out"
+sleep 1
+printf '<!doctype html><title>Plan</title><body><h1 id="t">Plan, edited</h1></body>\n' > "$page"
+sleep 2
+log="$(curl -fsS "$base/log/$key")"
+test "$(printf '%s\n' "$log" | grep -c '"t":"working"')" = 1 || fail "expected one working line: $log"
+"$X" reply "$page" "done" > /dev/null
+printf '<!doctype html><title>Plan</title><body><h1 id="t">Plan, edited again</h1></body>\n' > "$page"
+sleep 2
+test "$(curl -fsS "$base/log/$key" | grep -c '"t":"working"')" = 1 || fail "one edit after the reply wrote one more working line"
+kill "$t1" "$t2"; wait "$t1" "$t2" 2> /dev/null || true
+
+step "notes, acks and replies carry their time"
+curl -fsS "$base/log/$key" | grep -q '"t":"at","ms":[0-9]' || fail "no time lines in the log"
+head -1 "$dir/state/$key.jsonl" | grep -q '"t":"open"' || fail "the open line is not first"
