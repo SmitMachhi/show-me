@@ -48,6 +48,7 @@ pub fn asset(req: *Request, path: []const u8) !bool {
         .{ "/selector.js", @embedFile("selector.js"), "text/javascript" },
         .{ "/ui-log.js", @embedFile("ui-log.js"), "text/javascript" },
         .{ "/ui-layout.js", @embedFile("ui-layout.js"), "text/javascript" },
+        .{ "/ui-anchors.js", @embedFile("ui-anchors.js"), "text/javascript" },
         .{ "/ui.js", @embedFile("ui.js"), "text/javascript" },
         .{ "/ui.css", @embedFile("ui.css"), "text/css" },
     };

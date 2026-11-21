@@ -12,6 +12,8 @@
     const CSS_TEXT =
         "html{scrollbar-width:thin;scrollbar-color:#8886 transparent}" +
         "html[data-showme-annotate] [data-showme-hover]{outline:2px solid " + ACCENT + "66;outline-offset:2px;cursor:crosshair}" +
+        "[data-showme-queued]:not(g){outline:2px dashed " + ACCENT + "99;outline-offset:2px}" +
+        "g[data-showme-queued]>polygon,g[data-showme-queued]>path,g[data-showme-queued]>ellipse{stroke:" + ACCENT + ";stroke-dasharray:4 3}" +
         "[data-showme-picked]{outline:2px solid " + ACCENT + ";outline-offset:2px;box-shadow:0 0 0 6px " + ACCENT + "22}" +
         "[data-showme-flash]{animation:showme-flash .6s steps(2,jump-none)}" +
         "@keyframes showme-flash{0%,50%{outline:3px solid " + ACCENT + ";outline-offset:3px;box-shadow:0 0 0 8px " + ACCENT + "33}}" +
@@ -53,6 +55,20 @@
         return names.row || names.column ? names : null;
     }
 
+    // Where queued notes point: [{ id, selector, node }] from the panel, without their words.
+    let anchors = [];
+
+    // The element one anchor points at: the diagram node by name, else the selector.
+    function anchored(a) {
+        if (a.node) return [...document.querySelectorAll("g.node,g.edge,g.cluster")].find((g) => g.querySelector("title")?.textContent === a.node);
+        try { return document.querySelector(a.selector); } catch (e) { return null; }
+    }
+
+    function markAnchors() {
+        unmark("data-showme-queued");
+        for (const a of anchors) anchored(a)?.setAttribute("data-showme-queued", "");
+    }
+
     // Opens the note card at one element. `text` is its words, or the selected words.
     // `picture` is one image blob to attach. A card that already holds words gets the picture.
     function pick(el, kind, text, picture) {
@@ -66,6 +82,9 @@
         if (title) note.node = title.textContent;
         const cell = cellOf(el);
         if (cell) note.cell = cell;
+        // One click on one element that holds one queued note edits that note in the panel.
+        const held = kind === "element" && anchors.find((a) => (note.node ? a.node === note.node : a.selector === note.selector));
+        if (held) return post({ type: "edit", id: held.id });
         unmark("data-showme-picked");
         (part || el).setAttribute("data-showme-picked", "");
         const label = note.node || (kind === "text" ? "“" + note.text.slice(0, 60) + "”" : note.text.slice(0, 60) || note.selector);
@@ -156,6 +175,7 @@
         if (m.type === "reveal") reveal(m.selector);
         if (m.type === "restore") scrollTo(0, m.y);
         if (m.type === "imageDone") window.showmeCard.addImage(m.id, m.url);
+        if (m.type === "anchors") { anchors = m.items; markAnchors(); }
     });
 
     window.showmePick = pick; // graph.js calls this with one drawing

@@ -7,6 +7,7 @@ import { createImages } from "/ui-images.js";
 import { createChanges } from "/ui-changes.js";
 import { parseLog } from "/ui-log.js";
 import { createLayout } from "/ui-layout.js";
+import { createAnchors } from "/ui-anchors.js";
 
 const key = location.pathname.split("/").pop();
 const el = (id) => document.getElementById(id);
@@ -36,6 +37,7 @@ let replies = -1;
 let unseenReply = false;
 const images = createImages(key, () => render());
 const changes = createChanges(key, tell);
+const anchors = createAnchors(tell, () => queue);
 const layout = createLayout(tell, (issues) => {
     queue.push(withId({ kind: "layout", note: "Fix these layout issues.", issues }));
     render();
@@ -83,6 +85,7 @@ function render() {
     note.disabled = ended;
     bar.setBadge(queue.length, unseenReply);
     bar.setEnded(ended);
+    anchors.sync();
 }
 
 function reveal(selector) {
@@ -138,8 +141,11 @@ addEventListener("message", (e) => {
         bar.setTitle(m.title);
         setMode(saved("mode", m.annotate));
         tell({ type: "restore", y: scrollY });
+        anchors.sync();
     } else if (m.type === "scroll") {
         save("scroll", scrollY = m.y);
+    } else if (m.type === "edit") {
+        anchors.edit(m.id);
     } else if (m.type === "toggleMode") {
         setMode(!bar.isAnnotate());
     } else if (m.type === "image") {
