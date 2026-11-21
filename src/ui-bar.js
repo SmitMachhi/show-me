@@ -75,6 +75,8 @@ export function initBar(on) {
         // which is not trusted: only data:image/ and files of this review are used.
         setMeta(m) {
             this.setTitle(m.title || "");
+            // The frame shows the page's own canvas color. Only one plain rgb() color is used.
+            if (/^rgba?\([\d., ]+\)$/.test(m.canvas || "")) el("page").style.backgroundColor = m.canvas;
             const ok = /^data:image\//.test(m.icon) || (m.icon || "").startsWith(location.origin + "/a/" + location.pathname.split("/").pop() + "/");
             let link = document.querySelector("link[rel=icon]");
             if (!ok) return link && link.remove();

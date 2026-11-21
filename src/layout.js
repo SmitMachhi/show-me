@@ -57,7 +57,9 @@
             if (/auto|scroll/.test(s.overflowX + s.overflowY)) return null;
             const b = p.getBoundingClientRect();
             const out = r.left < b.left - 2 || r.top < b.top - 2 || r.right > b.right + 2 || r.bottom > b.bottom + 2;
-            return out ? p : null;
+            // Fully hidden (one closed panel) is on purpose. Only one partly shown control is cut.
+            const shows = r.right > b.left && r.left < b.right && r.bottom > b.top && r.top < b.bottom;
+            return out && shows ? p : null;
         }
         return null;
     }
@@ -74,7 +76,14 @@
     // sits on the middle of el's words. Clear layers do not count: the words show.
     function coveredBy(el, r) {
         if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth || !hasOwnText(el)) return null;
-        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        const [x, y] = [r.left + r.width / 2, r.top + r.height / 2];
+        // One element that one clipping ancestor hides at that point (one closed panel) is hidden on purpose.
+        for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+            if (getComputedStyle(p).overflow === "visible") continue;
+            const b = p.getBoundingClientRect();
+            if (x < b.left || x > b.right || y < b.top || y > b.bottom) return null;
+        }
+        const hit = document.elementFromPoint(x, y);
         if (!hit || el.contains(hit) || hit.contains(el) || skip(hit)) return null;
         for (let p = hit; p && p !== document.body; p = p.parentElement) {
             if (/sticky|fixed/.test(getComputedStyle(p).position)) return null;
@@ -94,7 +103,8 @@
     }
 
     // The color behind el: the first opaque background of el or its ancestors, else the
-    // white of the frame. Null behind one image or gradient: the colors there are unknown.
+    // page canvas (white, or dark for one page that asks for dark with color-scheme).
+    // Null behind one image or gradient: the colors there are unknown.
     function behind(el) {
         for (let p = el; p; p = p.parentElement) {
             const s = getComputedStyle(p);
@@ -102,21 +112,37 @@
             const a = (s.backgroundColor.match(/[\d.]+/g) || [])[3];
             if (s.backgroundColor !== "rgba(0, 0, 0, 0)" && (a === undefined || Number(a) > 0.9)) return s.backgroundColor;
         }
-        return "rgb(255, 255, 255)";
+        return canvas;
     }
 
+    // The canvas color, read from one probe element: it follows the page's color-scheme.
+    let canvas = "rgb(255, 255, 255)";
+    function readCanvas() {
+        const probe = document.createElement("div");
+        probe.setAttribute("data-showme-ui", "");
+        probe.style.cssText = "position:absolute;width:0;height:0;background:Canvas";
+        document.body.append(probe);
+        canvas = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+    }
+
+    // The text and back colors of el as one key, when they differ by less than 3:1.
     function hardToRead(el) {
-        if (!hasOwnText(el)) return false;
+        if (!hasOwnText(el)) return null;
         const back = behind(el);
-        if (!back) return false;
-        const [a, b] = [luminance(getComputedStyle(el).color), luminance(back)];
-        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) < 3;
+        if (!back) return null;
+        const color = getComputedStyle(el).color;
+        const [a, b] = [luminance(color), luminance(back)];
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) < 3 ? color + " on " + back : null;
     }
 
     function findings() {
         const found = [];
         const add = (el, problem) => found.push({ el, problem });
         const all = [...document.body.querySelectorAll("*")].filter((el) => !skip(el));
+        const pairs = new Set();
+        let pair = null;
+        readCanvas();
         if (doc.scrollWidth > doc.clientWidth + 1) {
             for (const el of all) {
                 const r = el.getBoundingClientRect();
@@ -133,7 +159,11 @@
             else if (control && clippedBy(el, r)) add(el, "control is cut off");
             else if (partlyOff(r) && (control || hasOwnText(el))) add(el, control ? "control is off the page" : "text is off the page");
             else if (coveredBy(el, r)) add(el, "text is covered");
-            else if (hardToRead(el) && !found.some((f) => f.problem === "text is hard to read" && f.el.contains(el))) add(el, "text is hard to read");
+            else if ((pair = hardToRead(el)) && !pairs.has(pair)) {
+                // One row for each pair of colors: one cause, one row.
+                pairs.add(pair);
+                add(el, "text is hard to read");
+            }
         }
         return found;
     }
