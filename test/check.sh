@@ -30,6 +30,13 @@ dupes="$(grep -ohE 'id="[A-Za-z][A-Za-z0-9_-]*"|\.id = "[A-Za-z][A-Za-z0-9_-]*"'
     sed -E 's/.*"(.*)"/\1/' | sort | uniq -d)"
 if [ -n "$dupes" ]; then echo "used twice: $dupes"; exit 1; fi
 
+echo "== frame sandbox matches the page header"
+# The frame attribute (ui.html) and the CSP header on each page (pages.zig) must allow the same.
+words() { tr ' ' '\n' | sort | tr '\n' ' '; }
+frame_sb="$(grep -o 'sandbox="[^"]*"' src/ui.html | sed 's/sandbox="//; s/"$//' | words)"
+header_sb="$(grep -o 'value = "sandbox [^"]*"' src/pages.zig | sed 's/value = "sandbox //; s/"$//' | words)"
+if [ -z "$frame_sb" ] || [ "$frame_sb" != "$header_sb" ]; then echo "frame: $frame_sb"; echo "header: $header_sb"; exit 1; fi
+
 echo "== no indefinite articles in the README and the skill"
 # The owner's writing rule. The DOT examples hold no "a" or "an" as one word.
 arts="$(grep -nwiE 'a|an' README.md src/skill/SKILL.md || true)"

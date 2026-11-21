@@ -78,7 +78,7 @@ show-me wait plan.html --reply "Title fixed"  # shows the reply, then waits agai
 ## Browser functions
 
 - One click on any element opens the note box at that element. Selected text opens the same box and marks the selected words.
-- One click on one link makes one note on the link. Ctrl+click (Cmd+click on macOS) opens the link in one new tab. The review page never leaves the frame.
+- One click on one link makes one note on the link. Ctrl+click (Cmd+click on macOS) opens the link in one new tab, outside the sandbox. The review page never leaves the frame. Pages can start downloads.
 - The note box and the chat accept images from the attach button, from paste and from drop.
 - One dashed outline marks each element that has one queued note. One click on that element opens the note for edits.
 - Each sent note shows its state: sent, seen, working (the agent changed the page), done (the agent replied). The tooltip shows the time of each step.

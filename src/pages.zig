@@ -16,7 +16,7 @@ const script_tag = "\n<script src=\"/selector.js\"></script><script src=\"/card.
     "<script src=\"/draw.js\"></script><script src=\"/graph.js\"></script><script src=\"/changes.js\"></script><script src=\"/layout.js\"></script>\n";
 const max_file_bytes = 64 * 1024 * 1024;
 // Sent with every reviewed file, so one opened outside the review frame still has no origin.
-const sandbox: Header = .{ .name = "content-security-policy", .value = "sandbox allow-scripts allow-forms allow-popups allow-modals" };
+const sandbox: Header = .{ .name = "content-security-policy", .value = "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads" };
 const no_store: Header = .{ .name = "cache-control", .value = "no-store" };
 const html: Header = .{ .name = "content-type", .value = "text/html; charset=utf-8" };
 
