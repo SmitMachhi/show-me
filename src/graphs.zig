@@ -91,16 +91,31 @@ fn draw(ctx: Ctx, arena: std.mem.Allocator, dot_text: []const u8) !Drawn {
     return .{ .svg = res.stdout[at.?..] };
 }
 
+// Folders where the usual installers put Graphviz. An agent that starts from the desktop
+// often has one short PATH without them, so they are searched after the PATH.
+const usual_dirs: []const []const u8 = if (builtin.os.tag == .windows)
+    &.{"C:\\Program Files\\Graphviz\\bin"}
+else
+    &.{ "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin" };
+
 fn findDot(ctx: Ctx, arena: std.mem.Allocator) ?[]const u8 {
     const windows = builtin.os.tag == .windows;
-    var dirs = std.mem.splitScalar(u8, ctx.env.get("PATH") orelse return null, if (windows) ';' else ':');
+    var dirs = std.mem.splitScalar(u8, ctx.env.get("PATH") orelse "", if (windows) ';' else ':');
     while (dirs.next()) |dir| {
-        if (dir.len == 0) continue;
-        const path = std.fs.path.join(arena, &.{ dir, if (windows) "dot.exe" else "dot" }) catch return null;
-        Io.Dir.cwd().access(ctx.io, path, .{}) catch continue;
-        return path;
+        if (dotIn(ctx, arena, dir)) |path| return path;
+    }
+    for (usual_dirs) |dir| {
+        if (dotIn(ctx, arena, dir)) |path| return path;
     }
     return null;
+}
+
+// The path of the `dot` program in one folder, or null if the folder has none.
+fn dotIn(ctx: Ctx, arena: std.mem.Allocator, dir: []const u8) ?[]const u8 {
+    if (dir.len == 0) return null;
+    const path = std.fs.path.join(arena, &.{ dir, if (builtin.os.tag == .windows) "dot.exe" else "dot" }) catch return null;
+    Io.Dir.cwd().access(ctx.io, path, .{}) catch return null;
+    return path;
 }
 
 // Windows only. Graphviz loads its font plugin on every run there, and that costs about
