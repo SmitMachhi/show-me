@@ -128,3 +128,14 @@ echo "$body" | grep -q "plan.html" || fail "the message does not name the file"
 step "one browser request cannot wait"
 code="$(curl -s -o /dev/null -w '%{http_code}' -H 'Sec-Fetch-Site: same-origin' "$base/wait/$key")"
 test "$code" = 403 || fail "one browser request to /wait got $code"
+
+step "setup writes the skill for each agent folder that exists"
+fake="$dir/home"; mkdir -p "$fake/.codex" "$fake/.config/opencode"
+out="$(HOME="$fake" USERPROFILE="$fake" "$X" setup)"
+echo "$out" | grep -q "Codex" || fail "setup did not name Codex: $out"
+test -f "$fake/.codex/skills/show-me/SKILL.md" || fail "no skill for Codex"
+test -f "$fake/.config/opencode/skills/show-me/base.html" || fail "no skill for OpenCode"
+if [ -e "$fake/.cursor" ] || [ -e "$fake/.claude" ]; then fail "setup made one agent folder that did not exist"; fi
+empty="$dir/empty-home"; mkdir -p "$empty"
+HOME="$empty" USERPROFILE="$empty" "$X" setup > /dev/null
+test -f "$empty/.claude/skills/show-me/SKILL.md" || fail "with no agent folder, setup did not write the Claude Code skill"

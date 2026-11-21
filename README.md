@@ -37,7 +37,7 @@ bunx show-me-cli
 Each command does these steps:
 
 1. Downloads the program to `~/.local/bin`.
-2. Writes the agent skill to `~/.claude/skills/show-me`.
+2. Writes the agent skill for each agent folder in the home folder: Claude Code, Codex, OpenCode, GitHub Copilot, Cursor, Gemini and the shared `~/.agents`. Each one gets `skills/show-me` in its folder. No settings file changes.
 3. Installs Graphviz with the system package manager, if Graphviz is not installed.
 4. Adds `~/.local/bin` to the PATH, if the PATH does not contain that folder.
 
@@ -72,7 +72,7 @@ show-me wait plan.html --reply "Title fixed"  # shows the reply, then waits agai
 - One review has one listener. The newest `wait` takes over, and each older `wait` stops with one message.
 - One note that the browser sends two times arrives one time.
 - When no browser tab shows the review for 20 seconds, `wait` prints `{"kind":"closed"}` and stops.
-| `show-me setup [folder]` | Writes the agent skill |
+| `show-me setup [folder]` | Writes the agent skill for each agent folder that exists, or into one given folder |
 | `show-me stop` | Stops the background daemon |
 
 ## Browser functions
