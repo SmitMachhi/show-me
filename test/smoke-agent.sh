@@ -13,15 +13,26 @@ send() { curl -fsS -X POST -H "Origin: $base" -d "$1" "$base/send/$key" > /dev/n
 # Starts one wait in the background, writing to $1. Sets $w to its process id.
 bg_wait() { "$X" wait "$page" > "$1" 2>&1 & w=$!; }
 running() { kill -0 "$1" 2> /dev/null; }
+# Waits up to $2 seconds for process $1 and returns its exit code. Never blocks forever:
+# a process still running then is stopped, and the step fails with $3.
+finish() {
+    for _ in $(seq "$2"); do
+        if ! running "$1"; then wait "$1"; return $?; fi
+        sleep 1
+    done
+    kill "$1"; fail "$3"
+}
+# Runs one wait that must return within 20 s, writing to $1. Extra arguments go to wait.
+wait_once() { out="$1"; shift; "$X" wait "$page" "$@" > "$out" 2>&1 & finish $! 20 "wait did not return within 20 s"; }
 
 step "newer wait takes over, older wait stops"
 bg_wait "$dir/w1.out"; w1=$w
 sleep 1
 bg_wait "$dir/w2.out"; w2=$w
-sleep 1
+# The older wait stops as soon as the newer one owns the review. Send after that.
+s1=0; finish "$w1" 20 "the older wait did not stop" || s1=$?
 send '{"kind":"message","note":"for the newer wait"}'
-s1=0; wait "$w1" || s1=$?
-wait "$w2"
+finish "$w2" 20 "the newer wait did not print the note"
 test "$s1" != 0 || fail "the older wait exited with 0"
 has "$dir/w1.out" "another wait" || fail "the older wait did not say why it stopped"
 if has "$dir/w1.out" "for the newer wait"; then fail "the older wait printed the note"; fi
@@ -30,7 +41,7 @@ has "$dir/w2.out" "for the newer wait" || fail "the newer wait did not print the
 step "one note sent twice arrives once, without its id"
 body='[{"id":"5f2b8c1e-0000-4000-8000-000000000001","kind":"message","note":"only once"}]'
 send "$body"; send "$body"
-"$X" wait "$page" > "$dir/w3.out"
+wait_once "$dir/w3.out"
 test "$(grep -c "only once" "$dir/w3.out")" = 1 || fail "the note arrived more than once"
 if has "$dir/w3.out" '"id"'; then fail "the agent saw the note id"; fi
 
@@ -53,14 +64,14 @@ has "$dir/w5.out" '"kind":"closed"' || fail "wait did not print the closed repor
 
 step "notes come before the closed report"
 send '{"kind":"message","note":"left before closing"}'
-"$X" wait "$page" > "$dir/w6.out"
+wait_once "$dir/w6.out"
 has "$dir/w6.out" "left before closing" || fail "the note did not come first"
 
 step "reply from one file keeps lines and accents"
 printf 'Line one\nLine two: caf\xc3\xa9\n' > "$dir/reply.md"
 "$X" reply "$page" --file "$dir/reply.md" > /dev/null
 curl -fsS "$base/log/$key" | grep -q 'Line one\\nLine two: café' || fail "the reply lost its lines or accents"
-"$X" wait "$page" --reply-file "$dir/reply.md" > /dev/null
+wait_once "$dir/w7.out" --reply-file "$dir/reply.md"
 test "$(curl -fsS "$base/log/$key" | grep -c 'Line one\\nLine two')" = 2 || fail "wait --reply-file sent no reply"
 
 step "export names the files it could not include"
