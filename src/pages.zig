@@ -18,6 +18,22 @@ const max_file_bytes = 64 * 1024 * 1024;
 // Sent with every reviewed file, so one opened outside the review frame still has no origin.
 const sandbox: Header = .{ .name = "content-security-policy", .value = "sandbox allow-scripts allow-forms allow-popups allow-modals" };
 const no_store: Header = .{ .name = "cache-control", .value = "no-store" };
+const html: Header = .{ .name = "content-type", .value = "text/html; charset=utf-8" };
+
+// What the frame shows while the page file is gone. The watcher reloads the frame when
+// the file is back, so the page returns with no click.
+fn missing(arena: std.mem.Allocator, file: []const u8) ![]const u8 {
+    var safe: std.ArrayList(u8) = .empty;
+    for (file) |c| switch (c) {
+        '<' => try safe.appendSlice(arena, "&lt;"),
+        '>' => try safe.appendSlice(arena, "&gt;"),
+        '&' => try safe.appendSlice(arena, "&amp;"),
+        else => try safe.append(arena, c),
+    };
+    return std.fmt.allocPrint(arena, "<!doctype html><meta charset=\"utf-8\"><title>Page file missing</title>" ++
+        "<body style=\"font:15px/1.5 system-ui,sans-serif;margin:40px;color:#555\"><p>The page file is missing:</p>" ++
+        "<p><code>{s}</code></p><p>The page comes back here when the file is back.</p>", .{safe.items});
+}
 
 fn respond(req: *Request, status: std.http.Status, body: []const u8, headers: []const Header) !void {
     return req.respond(body, .{ .status = status, .keep_alive = false, .extra_headers = headers });
@@ -84,8 +100,10 @@ pub fn artifact(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, ke
     const file = try reviews.fileOf(sh, arena, key);
     const path = if (sub.len == 0) file else (try confine(sh.io, arena, file, sub)) orelse
         return respond(req, .not_found, "not found\n", &.{});
-    const data = Io.Dir.cwd().readFileAlloc(sh.io, path, arena, .limited(max_file_bytes)) catch
-        return respond(req, .not_found, "not found\n", &.{});
+    const data = Io.Dir.cwd().readFileAlloc(sh.io, path, arena, .limited(max_file_bytes)) catch {
+        if (sub.len > 0) return respond(req, .not_found, "not found\n", &.{});
+        return respond(req, .not_found, try missing(arena, file), &.{ html, sandbox, no_store });
+    };
     var body = data;
     if (sub.len == 0) {
         const drawn = try graphs.expand(.{ .io = sh.io, .dir = sh.dir, .env = sh.env }, arena, data);
