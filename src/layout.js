@@ -6,6 +6,8 @@
 // - control or text is off the page: part of it sits left of or above the page edge,
 //   where nobody can scroll
 // - text is covered: one opaque box from elsewhere in the page sits on top of the words
+// - text is hard to read: text color and the color behind it differ by less than 3:1.
+//   One page with no background shows on white, in the review and as one export.
 // It only reports to the panel. Nothing reaches the agent unless the reviewer asks.
 // Left alone on purpose: ellipsis and line clamp, scroll areas, one-pixel boxes for
 // screen readers, hidden elements, and elements moved far off the page (skip links).
@@ -82,6 +84,35 @@
         return opaque || hasOwnText(hit) ? hit : null;
     }
 
+    // Relative luminance of one "rgb(...)" color, after WCAG 2.
+    function luminance(color) {
+        const [r, g, b] = (color.match(/[\d.]+/g) || [0, 0, 0]).slice(0, 3).map((v) => {
+            const c = Number(v) / 255;
+            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+
+    // The color behind el: the first opaque background of el or its ancestors, else the
+    // white of the frame. Null behind one image or gradient: the colors there are unknown.
+    function behind(el) {
+        for (let p = el; p; p = p.parentElement) {
+            const s = getComputedStyle(p);
+            if (s.backgroundImage !== "none") return null;
+            const a = (s.backgroundColor.match(/[\d.]+/g) || [])[3];
+            if (s.backgroundColor !== "rgba(0, 0, 0, 0)" && (a === undefined || Number(a) > 0.9)) return s.backgroundColor;
+        }
+        return "rgb(255, 255, 255)";
+    }
+
+    function hardToRead(el) {
+        if (!hasOwnText(el)) return false;
+        const back = behind(el);
+        if (!back) return false;
+        const [a, b] = [luminance(getComputedStyle(el).color), luminance(back)];
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) < 3;
+    }
+
     function findings() {
         const found = [];
         const add = (el, problem) => found.push({ el, problem });
@@ -102,6 +133,7 @@
             else if (control && clippedBy(el, r)) add(el, "control is cut off");
             else if (partlyOff(r) && (control || hasOwnText(el))) add(el, control ? "control is off the page" : "text is off the page");
             else if (coveredBy(el, r)) add(el, "text is covered");
+            else if (hardToRead(el) && !found.some((f) => f.problem === "text is hard to read" && f.el.contains(el))) add(el, "text is hard to read");
         }
         return found;
     }
