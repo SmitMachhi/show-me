@@ -159,10 +159,14 @@
 
     window.showmePick = pick; // graph.js calls this with one drawing
 
-    // For pages that are forms: window.showme.send("Use plan B", { plan: "B" })
+    // For pages that are forms: window.showme.send("Use plan B", { plan: "B" }, options)
+    // options.question: one name; one later answer with the same name replaces this one
+    // while both are unsent. options.now: send at once. options.end: send, then end.
     window.showme = {
-        send(note, data) {
-            post({ type: "note", kind: "page", note: String(note), data: data === undefined ? null : data });
+        send(note, data, options) {
+            const o = options || {};
+            post(Object.assign({ type: "note", kind: "page", note: String(note), data: data === undefined ? null : data },
+                o.question ? { question: String(o.question) } : {}, { sendNow: !!o.now, end: !!o.end }));
         },
     };
     post({ type: "ready", title: document.title, annotate });

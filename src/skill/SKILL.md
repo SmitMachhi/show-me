@@ -74,3 +74,5 @@ To collect one choice, use native controls and send the final answer once:
 ```html
 <button onclick="window.showme.send('Use plan B', {plan: 'B'})">Choose plan B</button>
 ```
+
+The third argument takes options. `{question: "plan"}`: one later answer to the same question replaces this answer while both are unsent. `{now: true}` sends at once. `{end: true}` sends, then ends the review.
