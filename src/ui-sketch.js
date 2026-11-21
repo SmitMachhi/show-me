@@ -9,7 +9,7 @@ export function initSketch(opener, onPicture) {
 
 function open(onPicture) {
     const pad = document.createElement("dialog");
-    pad.id = "sketch";
+    pad.id = "sketchPad";
     // The sheet has the size of the window, so no stroke lands outside the picture.
     pad.innerHTML = '<svg viewBox="0 0 ' + innerWidth + " " + innerHeight + '"></svg><nav>' +
         button("Undo", "undo") + button("Add to message", "check") + button("Close", "x") + "</nav>";
