@@ -81,6 +81,8 @@ show-me wait plan.html --reply "Title fixed"  # shows the reply, then waits agai
 - One click on one link makes one note on the link. Ctrl+click (Cmd+click on macOS) opens the link in one new tab. The review page never leaves the frame.
 - The note box and the chat accept images from the attach button, from paste and from drop.
 - One dashed outline marks each element that has one queued note. One click on that element opens the note for edits.
+- Each sent note shows its state: sent, seen, working (the agent changed the page), done (the agent replied). The tooltip shows the time of each step.
+- One notice shows when the review is open in more than one tab of the browser.
 - The pen button on each diagram lets the reviewer draw on the diagram. The note contains the drawing as one image and the names of the nodes below the strokes.
 - The pen button in the chat opens one blank sheet for one sketch. The message contains the sketch as one image.
 - The green number shows the changes since the last sent note. One click goes to the next change.

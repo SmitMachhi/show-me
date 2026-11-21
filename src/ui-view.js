@@ -2,8 +2,15 @@
 import { thumb, idOf } from "/ui-images.js";
 
 const SVG = "http://www.w3.org/2000/svg";
-// Chat convention: one check is sent, two is seen, two in color is done.
-const RECEIPT = { Sent: "check", Seen: "checks", Done: "checks" };
+// Chat convention: one check is sent, two is seen, two in color is done. The pen says
+// the agent changed the page after it saw the note.
+const RECEIPT = { Sent: "check", Seen: "checks", Working: "pen", Done: "checks" };
+
+// "Seen 14:02" and the steps before it, for the receipt's tooltip.
+function receiptTitle(s) {
+    const time = (ms) => (ms ? " " + new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
+    return ["Sent", "Seen", "Working", "Done"].filter((k) => k in s.times).map((k) => k + time(s.times[k])).join(", ");
+}
 
 export function icon(name) {
     const svg = document.createElementNS(SVG, "svg");
@@ -108,7 +115,8 @@ export function sentRow(s, changed, onReveal, urlOf) {
     if (s.note.kind === "end") return make("li", "system", "Review ended");
     const li = make("li", "me");
     const receipt = make("em", (s.state === "Done" ? "done" : "") + (changed ? " changed" : ""));
-    receipt.title = s.state;
+    receipt.title = receiptTitle(s);
+    receipt.setAttribute("aria-label", receipt.title);
     receipt.append(icon(RECEIPT[s.state]));
     li.append(...body(s.note, urlOf), receipt);
     if (s.note.selector) li.onclick = () => onReveal(s.note.selector);
