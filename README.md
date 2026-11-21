@@ -125,8 +125,10 @@ Measured on Windows 11 on 2026-11-20, median of 20 runs, with the daemon in oper
 | --- | ---: | ---: |
 | Open one page | 13.3 ms | 858.8 ms |
 | Reply | 13.8 ms | 864.6 ms |
-| Daemon memory | 1.5 MB | 70.9 MB |
+| Daemon memory, no tab open | 1.5 MB | 70.9 MB |
 | Text that `open` prints for the agent | 41 bytes | 3,090 bytes |
+
+Measured on Windows 11 on 2026-11-21 with show-me 0.1.4 and later changes: with one tab open on one page that loads 10 files, the daemon uses 2.1 MB of memory and 0.3 % of one CPU core while idle.
 
 ## Status
 
