@@ -62,7 +62,7 @@ Write DOT, never SVG. The program draws it:
 - Every element must help the reader. No eyebrow labels, badges, icon tiles, gradient text or filler paragraphs.
 - Lead with the decision or the answer. Put detail below it.
 - Plain HTML and the CSS in `base.html`. No framework, no file from another site.
-- Show first, then tell. Before each paragraph, ask if one visual module can carry it: diagram for relations, table for records, side-by-side columns for options, step chain for sequence, labeled figure for one thing with parts.
+- Show first, then tell. Before each paragraph, ask if one visual module can carry it. Diagram for relations, table for records, side-by-side columns for options. Step chain for sequence, labeled figure for one thing with parts.
 - Prose only for reasons and open questions. Keep it under each visual, short.
 - Verify each claim against the code before it goes on the page.
 
