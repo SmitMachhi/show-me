@@ -36,20 +36,27 @@ function quote(n) {
     return q;
 }
 
-// Inline marks: `code`, **bold**, *italic* and http links. Everything else is plain text.
+// One link that opens in one new tab. Its words are set as text, never as markup.
+function link(words, href) {
+    const a = make("a", "", words);
+    a.href = href;
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    return a;
+}
+
+// Inline marks: `code`, [words](http link), **bold**, *italic* and bare http links.
+// Everything else is plain text.
 function inline(text, into) {
-    const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|https?:\/\/[^\s)]+)/g);
+    const parts = text.split(/(`[^`]+`|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|https?:\/\/[^\s)]+)/g);
     for (const part of parts) {
-        if (/^`.+`$/.test(part)) into.append(make("code", "", part.slice(1, -1)));
+        const named = /^\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)$/.exec(part);
+        if (named) into.append(link(named[1], named[2]));
+        else if (/^`.+`$/.test(part)) into.append(make("code", "", part.slice(1, -1)));
         else if (/^\*\*.+\*\*$/.test(part)) into.append(make("b", "", part.slice(2, -2)));
         else if (/^\*.+\*$/.test(part)) into.append(make("i", "", part.slice(1, -1)));
-        else if (/^https?:\/\//.test(part)) {
-            const a = make("a", "", part);
-            a.href = part;
-            a.target = "_blank";
-            a.rel = "noreferrer";
-            into.append(a);
-        } else into.append(part);
+        else if (/^https?:\/\//.test(part)) into.append(link(part, part));
+        else into.append(part);
     }
 }
 
