@@ -14,7 +14,7 @@
 
     function fieldKey(el) {
         if (!el.matches || !el.matches("input,select,textarea") || el.closest("[data-showme-ui]")) return null;
-        if (el.type === "password" || el.type === "file") return null;
+        if (["password", "file", "hidden", "submit", "button", "reset", "image"].includes(el.type)) return null;
         const choice = el.type === "checkbox" || el.type === "radio" ? ":" + el.value : "";
         if (el.id) return "#" + el.id;
         return el.name ? "name:" + el.name + choice : null;
@@ -47,8 +47,10 @@
     function restoreCard(card) {
         const el = find(card);
         if (!el) {
+            // The words are queued once, and the saved card goes, so no later load queues them again.
             const { words, ...note } = card;
-            return post(Object.assign(note, { type: "note", note: words }));
+            post(Object.assign(note, { type: "note", note: words }));
+            return post({ type: "draft", card: null });
         }
         window.showmePick(el, card.kind === "text" ? "element" : card.kind, card.text || "");
         window.showmeCard.setWords(card.words);

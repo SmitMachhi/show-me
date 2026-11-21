@@ -12,6 +12,12 @@ export function createDrafts(key, tell) {
         try { sessionStorage.setItem(store, text.length > MAX ? JSON.stringify({ card: null, form: null }) : text); } catch (e) {}
     };
     return {
+        // One sent form answer makes the saved form values old: the agent may now ask
+        // something new under the same field names.
+        answered() {
+            saved.form = null;
+            keep();
+        },
         // Handles the page messages about drafts, and sends them back once the page loads.
         onMessage(m) {
             if (m.type === "draft") saved.card = m.card;

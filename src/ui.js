@@ -116,6 +116,7 @@ async function send(andEnd) {
             if (!r.ok) throw new Error(r.status);
             rowCount -= queue.items.length;
             changes.reset();
+            if (queue.items.some((n) => n.kind === "page")) drafts.answered();
             queue.clear();
             el("send").classList.add("sent");
             setTimeout(() => el("send").classList.remove("sent"), 900);
