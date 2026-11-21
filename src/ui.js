@@ -39,7 +39,8 @@ const changes = createChanges(key, tell);
 const anchors = createAnchors(tell, () => queue.items);
 const drafts = createDrafts(key, tell);
 const layout = createLayout(key, tell, (issues) => {
-    queue.add({ kind: "layout", note: "Fix these layout issues.", issues });
+    // question: one later "Fix selected" replaces this unsent note.
+    queue.add({ kind: "layout", note: "Fix these layout issues.", issues, question: "layout" });
     render();
 });
 
@@ -117,6 +118,7 @@ async function send(andEnd) {
             rowCount -= queue.items.length;
             changes.reset();
             if (queue.items.some((n) => n.kind === "page")) drafts.answered();
+            layout.sent(queue.items.filter((n) => n.kind === "layout").flatMap((n) => n.issues));
             queue.clear();
             el("send").classList.add("sent");
             setTimeout(() => el("send").classList.remove("sent"), 900);
