@@ -12,7 +12,7 @@ const Header = std.http.Header;
 
 const ui_html = @embedFile("ui.html");
 // Order matters: selector.js, card.js and target.js define what inject.js and layout.js call.
-const script_tag = "\n<script src=\"/selector.js\"></script><script src=\"/card.js\"></script><script src=\"/target.js\"></script><script src=\"/inject.js\"></script>" ++
+const script_tag = "\n<script src=\"/selector.js\"></script><script src=\"/card.js\"></script><script src=\"/target.js\"></script><script src=\"/inject.js\"></script><script src=\"/meta.js\"></script>" ++
     "<script src=\"/draw.js\"></script><script src=\"/graph.js\"></script><script src=\"/changes.js\"></script><script src=\"/layout.js\"></script>\n";
 const max_file_bytes = 64 * 1024 * 1024;
 // Sent with every reviewed file, so one opened outside the review frame still has no origin.
@@ -52,6 +52,7 @@ pub fn asset(req: *Request, path: []const u8) !bool {
     const files = [_][3][]const u8{
         .{ "/inject.js", @embedFile("inject.js"), "text/javascript" },
         .{ "/target.js", @embedFile("target.js"), "text/javascript" },
+        .{ "/meta.js", @embedFile("meta.js"), "text/javascript" },
         .{ "/graph.js", @embedFile("graph.js"), "text/javascript" },
         .{ "/draw.js", @embedFile("draw.js"), "text/javascript" },
         .{ "/card.js", @embedFile("card.js"), "text/javascript" },

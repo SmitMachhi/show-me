@@ -71,6 +71,16 @@ export function initBar(on) {
             el("title").textContent = title;
             document.title = (title ? title + " · " : "") + "show-me";
         },
+        // The page's title and icon for the browser tab. The icon comes from the page,
+        // which is not trusted: only data:image/ and files of this review are used.
+        setMeta(m) {
+            this.setTitle(m.title || "");
+            const ok = /^data:image\//.test(m.icon) || (m.icon || "").startsWith(location.origin + "/a/" + location.pathname.split("/").pop() + "/");
+            let link = document.querySelector("link[rel=icon]");
+            if (!ok) return link && link.remove();
+            if (!link) document.head.append(link = Object.assign(document.createElement("link"), { rel: "icon" }));
+            link.href = m.icon;
+        },
         setEnded(ended) {
             document.body.classList.toggle("ended", ended);
             el("end").disabled = ended;

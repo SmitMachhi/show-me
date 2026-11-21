@@ -156,6 +156,8 @@ addEventListener("message", (e) => {
         setMode(saved("mode", m.annotate));
         tell({ type: "restore", y: scrollY });
         anchors.sync();
+    } else if (m.type === "meta") {
+        bar.setMeta(m);
     } else if (m.type === "scroll") {
         save("scroll", scrollY = m.y);
     } else if (m.type === "edit") {
