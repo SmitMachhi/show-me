@@ -6,7 +6,7 @@ const builtin = @import("builtin");
 const Io = std.Io;
 const Env = std.process.Environ.Map;
 
-pub const version = "0.1.1";
+pub const version = "0.1.2";
 pub const default_port: u16 = 4388;
 
 pub const Info = struct { port: u16, version: []const u8 };
