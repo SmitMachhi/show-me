@@ -1,16 +1,6 @@
 e/
 *.exe
 *.pdb
-*.obj
-*.lib
-bench/**/main-linux
-bench/**/main-macos
-bench/**/https-linux
-bench/**/https-macos
-bench/rust/zigcc.bat
-bench/spike/
-design/*.png
-design/*.svg
 zig-out/
 .zig-cache/
 .show-me/
