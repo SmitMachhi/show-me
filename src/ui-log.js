@@ -29,7 +29,8 @@ export function parseLog(text) {
         }
         if (e.t === "end") ended = true;
         if (e.t === "start") ended = false;
-        if (e.t !== "id") at = null;
+        // One send writes one time line, then the id and note lines of every note in it.
+        if (e.t !== "id" && e.t !== "note") at = null;
     }
     return { rows, file, ended, replies: rows.filter((r) => r.agent).length };
 }

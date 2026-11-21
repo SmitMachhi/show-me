@@ -116,6 +116,8 @@ async function loadLog() {
 
 // Sends the queued notes, plus the composer text as one message. `andEnd` ends the review after.
 async function send(andEnd) {
+    // Enter, End review and Ctrl+Enter in the card all come here, not only the Send button.
+    if (!images.ready()) return showBanner("Wait for the images to upload, or remove the one that failed.");
     const text = note.value.trim();
     const pics = images.take();
     if (text || pics.length) queue.push(withId(Object.assign({ kind: "message", note: text }, pics.length ? { images: pics } : {})));
