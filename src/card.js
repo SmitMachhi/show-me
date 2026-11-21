@@ -22,6 +22,8 @@
         "button:hover{background:#0000000f}button:active{scale:.96}" +
         "button.go{background:#3657d6;color:#fff}button.go:hover{background:#2f4cc0}" +
         ".pics{display:flex;gap:6px;padding:0 6px}.pics:empty{display:none}.pics img{width:40px;height:40px;object-fit:cover;border-radius:8px}" +
+        "button.pic{display:grid;place-items:center;padding:6px}button.pic svg{width:16px;height:16px;fill:none;stroke:currentColor;" +
+        "stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.box.drop{box-shadow:0 0 0 2px #3657d6,0 12px 32px #00000026}" +
         "@media(prefers-color-scheme:dark){.box{background:#1f1f1f;color:#ededeb;" +
         "box-shadow:0 0 0 1px #ffffff26,0 12px 32px #00000080}.where,small,button{color:#9b9b96}" +
         "button:hover{background:#ffffff14}button.go{background:#8ea2ff;color:#10142b}}" +
@@ -47,6 +49,26 @@
         host.style.left = (scrolls ? scrollX : 0) + Math.max(8, Math.min(rect.left, innerWidth - 308)) + "px";
     }
 
+    const PIC_ICON = '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/>' +
+        '<circle cx="9" cy="10" r="1.5"/><path d="m4 18 5-5 4 4 3-3 4 4"/></svg>';
+
+    // Pictures reach the card three ways: the attach button, paste, and drop.
+    function takeImages(root, onImage) {
+        const box = root.querySelector(".box");
+        const input = root.querySelector("input[type=file]");
+        const take = (files) => [...files].filter((f) => f.type.startsWith("image/")).forEach(onImage);
+        root.querySelector(".pic").onclick = () => input.click();
+        input.onchange = () => { take(input.files); input.value = ""; };
+        area.onpaste = (e) => {
+            if (![...e.clipboardData.files].some((f) => f.type.startsWith("image/"))) return;
+            e.preventDefault();
+            take(e.clipboardData.files);
+        };
+        box.ondragover = (e) => { e.preventDefault(); box.classList.add("drop"); };
+        box.ondragleave = () => box.classList.remove("drop");
+        box.ondrop = (e) => { e.preventDefault(); box.classList.remove("drop"); take(e.dataTransfer.files); };
+    }
+
     // `onQueue(words, sendNow, pictureIds)` runs when the reviewer queues the note.
     // `onImage(file)` runs for each pasted picture; the panel uploads it, then calls addImage.
     function open(target, onQueue, onImage) {
@@ -56,8 +78,10 @@
         const root = host.attachShadow({ mode: "closed" });
         root.innerHTML = "<style>" + CSS_TEXT + '</style><div class="box"><p class="where"></p>' +
             '<textarea rows="3" aria-label="Note" placeholder="Add a note"></textarea><div class="pics"></div>' +
-            '<div class="bar"><small></small><button type="button">Cancel</button>' +
-            '<button type="button" class="go">Add</button></div></div>';
+            '<div class="bar"><button type="button" class="pic" title="Attach image" aria-label="Attach image">' + PIC_ICON +
+            '</button><input type="file" accept="image/png,image/jpeg,image/webp" multiple hidden><small></small>' +
+            '<button type="button" class="no" title="Cancel (Esc)">Cancel</button>' +
+            '<button type="button" class="go" title="Add (Enter). Add and send: Ctrl+Enter">Add</button></div></div>';
         area = root.querySelector("textarea");
         strip = root.querySelector(".pics");
         root.querySelector(".where").textContent = target.label;
@@ -68,14 +92,9 @@
             close();
             onQueue(text, sendNow, ids);
         };
-        root.querySelector("button").onclick = close;
+        root.querySelector(".no").onclick = close;
         root.querySelector(".go").onclick = () => queue(false);
-        area.onpaste = (e) => {
-            const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
-            if (!files.length) return;
-            e.preventDefault();
-            files.forEach(onImage);
-        };
+        takeImages(root, onImage);
         area.onkeydown = (e) => {
             e.stopPropagation();
             if (e.key === "Escape") e.preventDefault(); // Esc must not also close the full-window view
@@ -91,7 +110,7 @@
     }
 
     function addImage(id, url) {
-        if (!host || pics.length >= 4) return;
+        if (!host || pics.length >= 4 || pics.includes(id)) return;
         pics.push(id);
         const img = document.createElement("img");
         img.src = url;

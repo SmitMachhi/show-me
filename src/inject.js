@@ -121,6 +121,11 @@
         pick(e.target, "element", e.target.textContent || "");
     }, true);
 
+    // One file dropped outside the note card must not replace the reviewed page.
+    const files = (e) => e.dataTransfer && e.dataTransfer.types.includes("Files");
+    addEventListener("dragover", (e) => { if (files(e)) e.preventDefault(); });
+    addEventListener("drop", (e) => { if (files(e)) e.preventDefault(); });
+
     addEventListener("mouseup", (e) => {
         const sel = getSelection();
         const text = String(sel).trim();

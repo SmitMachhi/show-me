@@ -49,6 +49,10 @@ export function createImages(key, onChange) {
     });
     el("form").addEventListener("dragover", (e) => e.preventDefault());
     el("form").addEventListener("drop", (e) => { e.preventDefault(); add([...e.dataTransfer.files]); });
+    // One file dropped outside the composer must not replace the review page.
+    const files = (e) => e.dataTransfer && e.dataTransfer.types.includes("Files");
+    addEventListener("dragover", (e) => { if (files(e)) e.preventDefault(); });
+    addEventListener("drop", (e) => { if (files(e)) e.preventDefault(); });
 
     return {
         upload,
