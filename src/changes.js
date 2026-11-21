@@ -2,7 +2,8 @@
 // sent notes, so they can see what the agent did without rereading the page.
 // The page author does nothing for this: blocks of text are compared as they are.
 // Limits: a block that was removed leaves nothing to mark, and a block that only moved
-// counts as unchanged. Content drawn by the page's own script after load is not seen.
+// counts as unchanged. Content drawn by the page's own script after load is not marked on
+// that load, but it is part of the page that one send records.
 (function () {
     const BLOCKS = "h1,h2,h3,h4,h5,h6,p,li,td,th,dt,dd,pre,blockquote,figcaption,summary,g.node,g.edge";
     const GREEN = "#2b9348";
@@ -62,6 +63,7 @@
         if (e.source !== parent || !m || m.source !== "showme-panel") return;
         if (m.type === "diff") mark(m.before);
         if (m.type === "step") step();
+        if (m.type === "snapshot") post({ type: "blocks", texts: blocks().map(textOf) });
     });
     post({ type: "blocks", texts: blocks().map(textOf) });
 })();

@@ -5,7 +5,8 @@ export function createChanges(key, tell) {
     const chip = document.getElementById("changes");
     const store = "showme:before:" + key;
     let before = null;
-    let now = [];
+    // True from one send until the page answers with its blocks as they are then.
+    let rebase = false;
     try { before = JSON.parse(sessionStorage.getItem(store)); } catch (e) {}
 
     function compare() {
@@ -19,18 +20,19 @@ export function createChanges(key, tell) {
         // Handles the two messages the page sends about changes.
         onMessage(m) {
             if (m.type === "blocks") {
-                now = m.texts;
-                if (!before) before = now;
+                if (!before || rebase) before = m.texts;
+                rebase = false;
                 compare();
             } else if (m.type === "changes") {
                 chip.hidden = !m.count;
                 chip.textContent = m.count === 1 ? "1 change" : m.count + " changes";
             }
         },
-        // Call when notes are sent: from then on, changes are measured from this page.
+        // Call when notes are sent: from then on, changes are measured from the page as it
+        // is now. The page is asked again, because it may have drawn more since it loaded.
         reset() {
-            before = now;
-            compare();
+            rebase = true;
+            tell({ type: "snapshot" });
         },
     };
 }
