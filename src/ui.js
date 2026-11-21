@@ -9,6 +9,7 @@ import { parseLog } from "/ui-log.js";
 import { createLayout } from "/ui-layout.js";
 import { createAnchors } from "/ui-anchors.js";
 import { connect } from "/ui-stream.js";
+import { watchTabs } from "/ui-tabs.js";
 
 const key = location.pathname.split("/").pop();
 const el = (id) => document.getElementById(id);
@@ -186,5 +187,6 @@ note.onkeydown = (e) => {
 };
 
 connect(key, { reload: reloadPage, log: loadLog, banner: showBanner });
+watchTabs(key);
 page.src = "/a/" + key + "/";
 loadLog();
