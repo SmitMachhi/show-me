@@ -28,10 +28,18 @@ if (-not $dot) {
     }
 }
 
-# A new terminal finds show-me only if its folder is on the PATH.
-$userPath = "" + [Environment]::GetEnvironmentVariable("Path", "User")
-if (($userPath -split ";") -notcontains $dir) {
-    [Environment]::SetEnvironmentVariable("Path", ($userPath.TrimEnd(";") + ";" + $dir), "User")
+# A new terminal finds show-me only if its folder is on the PATH. The user PATH is read
+# and written raw, as one expandable value, so entries like %USERPROFILE%\go\bin keep
+# their variables. SHOW_ME_KEEP_PATH=1 leaves the PATH alone (tests use it).
+$key = "HKCU:\Environment"
+$raw = "" + (Get-Item $key).GetValue("Path", "", "DoNotExpandEnvironmentNames")
+$parts = @($raw -split ";" | Where-Object { $_ })
+$known = $parts | ForEach-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd("\") }
+if (-not $env:SHOW_ME_KEEP_PATH -and ($known -notcontains $dir.TrimEnd("\"))) {
+    Set-ItemProperty -Path $key -Name Path -Value (($parts + $dir) -join ";") -Type ExpandString
+    # Setting one variable through .NET tells open programs that the environment changed.
+    [Environment]::SetEnvironmentVariable("SHOW_ME_PATH_CHANGED", "1", "User")
+    [Environment]::SetEnvironmentVariable("SHOW_ME_PATH_CHANGED", $null, "User")
     $env:Path += ";" + $dir
     Write-Host "Added $dir to the PATH. Open one new terminal to use it."
 }

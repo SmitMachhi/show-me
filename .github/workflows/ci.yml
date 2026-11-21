@@ -59,6 +59,22 @@ jobs:
           "$HOME/.local/bin/show-me" --version
           if [ "$RUNNER_OS" != "Windows" ]; then dot -V; fi
 
+      # The Windows installer adds its folder to the user PATH. Entries that hold one
+      # variable, like %USERPROFILE%\go\bin, must keep it, and the value must stay expandable.
+      - name: Installer keeps PATH variables (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $key = "HKCU:\Environment"
+          Set-ItemProperty -Path $key -Name Path -Value "%USERPROFILE%\showme-test-bin" -Type ExpandString
+          $env:SHOW_ME_INSTALL_DIR = "$env:RUNNER_TEMP\showme-path-test"
+          powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
+          $raw = (Get-Item $key).GetValue("Path", "", "DoNotExpandEnvironmentNames")
+          Write-Host "user PATH after install: $raw"
+          if ($raw -notlike "*%USERPROFILE%\showme-test-bin*") { throw "the installer expanded one PATH variable" }
+          if ($raw -notlike "*showme-path-test*") { throw "the installer did not add its folder" }
+          if ((Get-Item $key).GetValueKind("Path") -ne "ExpandString") { throw "the PATH value is no longer expandable" }
+
       - name: Unit tests
         run: |
           for f in src/*.zig; do
@@ -70,6 +86,25 @@ jobs:
 
       - name: Smoke test
         run: bash test/smoke.sh "./${{ matrix.out }}"
+
+      # `show-me update` starts the installer and exits, so the installer can replace the
+      # program file, also on Windows. Proof: the file changes within one minute.
+      - name: Update replaces the program
+        run: |
+          d="$RUNNER_TEMP/update-test"; mkdir -p "$d/home"
+          name=show-me; [ "$RUNNER_OS" = "Windows" ] && name=show-me.exe
+          cp "./${{ matrix.out }}" "$d/$name"
+          hash() { (sha256sum "$1" 2> /dev/null || shasum -a 256 "$1") | cut -c1-16; }
+          before="$(hash "$d/$name")"
+          SHOW_ME_KEEP_PATH=1 HOME="$d/home" USERPROFILE="$d/home" "$d/$name" update
+          for _ in $(seq 60); do
+            after="$(hash "$d/$name")"
+            [ -n "$after" ] && [ "$after" != "$before" ] && break
+            sleep 1
+          done
+          echo "before $before, after $after"
+          test "$after" != "$before"
+          "$d/$name" --version
 
       - uses: actions/upload-artifact@v4
         with:

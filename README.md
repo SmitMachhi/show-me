@@ -74,6 +74,7 @@ show-me wait plan.html --reply "Title fixed"  # shows the reply, then waits agai
 - When no browser tab shows the review for 20 seconds, `wait` prints `{"kind":"closed"}` and stops.
 | `show-me setup [folder]` | Writes the agent skill for each agent folder that exists, or into one given folder |
 | `show-me stop` | Stops the background daemon |
+| `show-me update` | Installs the newest release in the folder of the program |
 
 ## Browser functions
 

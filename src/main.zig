@@ -11,6 +11,7 @@ const lint = @import("lint.zig");
 const exporter = @import("export.zig");
 const list = @import("list.zig");
 const setup = @import("setup.zig");
+const update = @import("update.zig");
 const Io = std.Io;
 
 const usage =
@@ -28,6 +29,7 @@ const usage =
     \\                             name each local file it could not include
     \\  show-me setup [folder]     write the agent skill (default ~/.claude/skills/show-me)
     \\  show-me stop               end the background daemon
+    \\  show-me update             install the newest release over this program
     \\  show-me --version
     \\
 ;
@@ -45,6 +47,7 @@ pub fn main(init: std.process.Init) !void {
     if (std.mem.eql(u8, cmd, "export")) return exportPage(init, args);
     if (std.mem.eql(u8, cmd, "setup")) return setup.run(init, args);
     if (std.mem.eql(u8, cmd, "stop")) return stop(init);
+    if (std.mem.eql(u8, cmd, "update")) return update.run(init);
     if (std.mem.eql(u8, cmd, "--version")) return agent.say(init.io, state.version ++ "\n");
     if (std.mem.eql(u8, cmd, "--help")) return agent.say(init.io, usage);
     std.debug.print("{s}", .{usage});

@@ -36,17 +36,20 @@ if ! command -v dot >/dev/null 2>&1; then
 fi
 
 # A new terminal finds show-me only if its folder is on the PATH.
-case ":$PATH:" in
-    *":$dir:"*) ;;
-    *)
-        case "${SHELL:-}" in
-            */zsh) rc="$HOME/.zshrc" ;;
-            */bash) rc="$HOME/.bashrc" ;;
-            *) rc="$HOME/.profile" ;;
-        esac
-        printf '\nexport PATH="%s:$PATH"\n' "$dir" >>"$rc"
-        echo "Added $dir to the PATH in $rc. Open one new terminal to use it."
-        ;;
-esac
+# SHOW_ME_KEEP_PATH=1 leaves the shell files alone (tests use it).
+if [ -z "${SHOW_ME_KEEP_PATH:-}" ]; then
+    case ":$PATH:" in
+        *":$dir:"*) ;;
+        *)
+            case "${SHELL:-}" in
+                */zsh) rc="$HOME/.zshrc" ;;
+                */bash) rc="$HOME/.bashrc" ;;
+                *) rc="$HOME/.profile" ;;
+            esac
+            printf '\nexport PATH="%s:$PATH"\n' "$dir" >>"$rc"
+            echo "Added $dir to the PATH in $rc. Open one new terminal to use it."
+            ;;
+    esac
+fi
 
 echo "show-me $("$dir/show-me" --version) is installed."
