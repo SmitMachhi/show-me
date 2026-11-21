@@ -10,6 +10,7 @@
 const std = @import("std");
 const presence = @import("presence.zig");
 const images = @import("images.zig");
+const events = @import("events.zig");
 const Io = std.Io;
 
 pub const Key = [16]u8;
@@ -35,6 +36,8 @@ pub const Shared = struct {
     turns: u64 = 0,
     // Reviews that one browser tab has shown since the daemon started.
     shown: std.AutoHashMapUnmanaged(Key, void) = .empty,
+    // The local files each review's page loaded, so an edit to one reloads the page.
+    loaded: std.AutoHashMapUnmanaged(Key, events.Files) = .empty,
 };
 
 // The key is derived from the real path, so it is an address, not a secret.

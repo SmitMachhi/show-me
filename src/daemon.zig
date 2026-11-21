@@ -10,6 +10,7 @@ const guard = @import("guard.zig");
 const images = @import("images.zig");
 const housekeeping = @import("housekeeping.zig");
 const delivery = @import("delivery.zig");
+const events = @import("events.zig");
 const Io = std.Io;
 const net = Io.net;
 const Request = std.http.Server.Request;
@@ -125,7 +126,7 @@ fn register(c: Call) !void {
 
 fn get(c: Call, action: []const u8, key: reviews.Key) !void {
     if (is(action, "r")) return pages.page(c.req);
-    if (is(action, "events")) return pages.events(c.sh, c.req, c.arena, key);
+    if (is(action, "events")) return events.serve(c.sh, c.req, c.arena, key);
     if (is(action, "log")) return reply(c.req, .ok, try reviews.readLog(c.sh, c.arena, key));
     if (is(action, "export")) return pages.download(c.sh, c.req, c.arena, key);
     if (is(action, "wait")) return delivery.serve(c.sh, c.req, c.arena, key);

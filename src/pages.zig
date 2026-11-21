@@ -3,7 +3,7 @@
 // Limit: file changes are found by checking the modified time every 200 ms.
 const std = @import("std");
 const reviews = @import("reviews.zig");
-const presence = @import("presence.zig");
+const events = @import("events.zig");
 const graphs = @import("graphs.zig");
 const exporter = @import("export.zig");
 const Io = std.Io;
@@ -105,6 +105,7 @@ pub fn artifact(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, ke
         return respond(req, .not_found, try missing(arena, file), &.{ html, sandbox, no_store });
     };
     var body = data;
+    if (sub.len > 0) events.loaded(sh, key, path);
     if (sub.len == 0) {
         const drawn = try graphs.expand(.{ .io = sh.io, .dir = sh.dir, .env = sh.env }, arena, data);
         body = try std.mem.concat(arena, u8, &.{ drawn.html, script_tag });
@@ -121,66 +122,6 @@ pub fn confine(io: Io, arena: std.mem.Allocator, file: []const u8, sub: []const 
     const real = Io.Dir.cwd().realPathFileAlloc(io, joined, arena) catch return null;
     const inside = real.len > root.len and std.mem.startsWith(u8, real, root) and std.fs.path.isSep(real[root.len]);
     return if (inside) real else null;
-}
-
-// What one open tab is watching. A change in any field becomes one event.
-const Watch = struct {
-    file_time: i96,
-    log_size: u64,
-    state: presence.State,
-    working: bool,
-
-    fn now(sh: *reviews.Shared, key: reviews.Key, file: []const u8, prev: ?Watch) Watch {
-        const log_size = reviews.logSize(sh, key) orelse 0;
-        // The log is reread only when it grew.
-        var working = if (prev) |p| p.working else false;
-        if (prev == null or prev.?.log_size != log_size) {
-            var tmp = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-            defer tmp.deinit();
-            const log = reviews.readLog(sh, tmp.allocator(), key) catch "";
-            working = presence.deliveredUnanswered(log);
-        }
-        const stat = Io.Dir.cwd().statFile(sh.io, file, .{}) catch null;
-        return .{
-            .file_time = if (stat) |s| s.mtime.nanoseconds else 0,
-            .log_size = log_size,
-            .state = presence.state(sh, key, working),
-            .working = working,
-        };
-    }
-};
-
-// Server-sent events: "reload" when the reviewed file changes, "log" when notes or
-// replies are added, "presence <state>" when the agent comes or goes.
-pub fn events(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key: reviews.Key) !void {
-    const file = try reviews.fileOf(sh, arena, key);
-    var buf: [256]u8 = undefined;
-    var body = try req.respondStreaming(&buf, .{ .respond_options = .{
-        .extra_headers = &.{ .{ .name = "content-type", .value = "text/event-stream" }, no_store },
-    } });
-    const out = &body.writer;
-    const tab = presence.join(sh, &sh.tabs, key);
-    presence.markShown(sh, key);
-    defer presence.leave(sh, &sh.tabs, tab);
-    var last = Watch.now(sh, key, file, null);
-    try out.print("data: presence {t}\n\n", .{last.state});
-    var tick: u32 = 0;
-    while (true) : (tick += 1) {
-        // Two buffers sit between here and the socket: the body's, then the connection's.
-        try out.flush();
-        try body.flush();
-        Io.sleep(sh.io, .{ .nanoseconds = 200 * std.time.ns_per_ms }, .awake) catch return;
-        const next = Watch.now(sh, key, file, last);
-        if (next.file_time != last.file_time) {
-            presence.markWorking(sh, key);
-            try out.writeAll("data: reload\n\n");
-        }
-        if (next.log_size != last.log_size) try out.writeAll("data: log\n\n");
-        if (next.state != last.state) try out.print("data: presence {t}\n\n", .{next.state});
-        // The comment line every 5 s is how one closed tab gets noticed.
-        if (tick % 25 == 24) try out.writeAll(": ping\n\n");
-        last = next;
-    }
 }
 
 // The standalone copy of the reviewed page, sent as one file to save.
