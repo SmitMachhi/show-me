@@ -2,6 +2,8 @@
 // Lines: {"t":"open","file":..}, {"t":"note","data":..}, {"t":"ack","n":N},
 // {"t":"reply","text":..}. Notes past the last ack are undelivered. A reader that dies
 // before its ack gets them again, so delivery is at-least-once and nothing is lost.
+// One {"t":"id","v":..} line comes before each note the browser gave one id, so the
+// same note sent twice (one retry after one lost answer) is stored once.
 // Limits: one changed log is reread whole, and all reviews share one wake-up signal.
 const std = @import("std");
 const presence = @import("presence.zig");
@@ -11,7 +13,8 @@ const Io = std.Io;
 pub const Key = [16]u8;
 pub const max_note_bytes = 256 * 1024;
 const max_log_bytes = 64 * 1024 * 1024;
-const note_prefix = "{\"t\":\"note\",\"data\":";
+pub const note_prefix = "{\"t\":\"note\",\"data\":";
+const id_prefix = "{\"t\":\"id\",\"v\":\"";
 pub const ack_prefix = "{\"t\":\"ack\",\"n\":";
 pub const reply_prefix = "{\"t\":\"reply\",\"text\":";
 const end_prefix = "{\"t\":\"end\",\"by\":";
@@ -25,6 +28,11 @@ pub const Shared = struct {
     changed: Io.Condition = .init,
     tabs: presence.Table = @splat(null),
     waiters: presence.Table = @splat(null),
+    // The turn of the newest `wait` for each review. Only that wait may deliver.
+    owners: std.AutoHashMapUnmanaged(Key, u64) = .empty,
+    turns: u64 = 0,
+    // Reviews that one browser tab has shown since the daemon started.
+    shown: std.AutoHashMapUnmanaged(Key, void) = .empty,
 };
 
 // The key is derived from the real path, so it is an address, not a secret.
@@ -79,24 +87,51 @@ pub fn register(sh: *Shared, arena: std.mem.Allocator, real_path: []const u8) !K
 fn append(sh: *Shared, key: Key, lines: []const u8) !void {
     sh.mutex.lockUncancelable(sh.io);
     defer sh.mutex.unlock(sh.io);
+    try appendLocked(sh, key, lines);
+}
+
+fn appendLocked(sh: *Shared, key: Key, lines: []const u8) !void {
     const f = try sh.dir.createFile(sh.io, &logName(key), .{ .truncate = false });
     defer f.close(sh.io);
     try f.writePositionalAll(sh.io, lines, try f.length(sh.io));
 }
 
+// The note's id line, or "" when the browser gave no usable id. The id leaves the note,
+// so the agent never reads it. Only letters, digits and "-" are kept, up to 64 of them.
+fn takeId(arena: std.mem.Allocator, note: *std.json.Value) ![]const u8 {
+    if (note.* != .object) return "";
+    const kv = note.object.fetchOrderedRemove("id") orelse return "";
+    if (kv.value != .string or kv.value.string.len == 0 or kv.value.string.len > 64) return "";
+    for (kv.value.string) |c| if (!std.ascii.isAlphanumeric(c) and c != '-') return "";
+    return std.fmt.allocPrint(arena, "{s}{s}\"}}\n", .{ id_prefix, kv.value.string });
+}
+
 // The body comes from a browser. Reparse it so each log line is one valid JSON line.
-// One array becomes one note per item, written in one append.
+// One array becomes one note per item, written in one append. A note whose id is
+// already in the log is skipped; the check and the write share one lock.
 pub fn send(sh: *Shared, arena: std.mem.Allocator, key: Key, body: []const u8) !void {
     const value = try std.json.parseFromSliceLeaky(std.json.Value, arena, body, .{});
     const items: []const std.json.Value = if (value == .array) value.array.items else &.{value};
-    var lines: std.ArrayList(u8) = .empty;
+    var ids: std.ArrayList([]const u8) = .empty;
+    var notes: std.ArrayList([]const u8) = .empty;
     for (items) |item| {
         var note = item;
+        try ids.append(arena, try takeId(arena, &note));
         try images.resolve(sh, arena, &note);
         const data = try std.json.Stringify.valueAlloc(arena, note, .{});
-        try lines.print(arena, "{s}{s}}}\n", .{ note_prefix, data });
+        try notes.append(arena, try std.fmt.allocPrint(arena, "{s}{s}}}\n", .{ note_prefix, data }));
     }
-    try append(sh, key, lines.items);
+    sh.mutex.lockUncancelable(sh.io);
+    defer sh.mutex.unlock(sh.io);
+    const log = try readLog(sh, arena, key);
+    var lines: std.ArrayList(u8) = .empty;
+    for (ids.items, notes.items) |id, note| {
+        if (id.len > 0 and std.mem.find(u8, log, id) != null) continue;
+        if (id.len > 0 and std.mem.find(u8, lines.items, id) != null) continue;
+        try lines.appendSlice(arena, id);
+        try lines.appendSlice(arena, note);
+    }
+    if (lines.items.len > 0) try appendLocked(sh, key, lines.items);
     sh.changed.broadcast(sh.io);
 }
 
@@ -131,64 +166,15 @@ pub fn endedBy(log: []const u8) ?[]const u8 {
     }
     return by;
 }
-
-// Returns "<total>\n" then one undelivered note per line. Returns null after two seconds
-// with none, so the caller can check that the agent's command is still there, then call
-// again. `seen_size` skips the reread while the log has not grown.
-pub fn waitBeat(sh: *Shared, arena: std.mem.Allocator, key: Key, seen_size: *u64) !?[]const u8 {
-    sh.mutex.lockUncancelable(sh.io);
-    defer sh.mutex.unlock(sh.io);
-    const size = logSize(sh, key) orelse return error.FileNotFound;
-    if (size != seen_size.*) {
-        seen_size.* = size;
-        if (try pending(arena, try readLog(sh, arena, key))) |out| return out;
-    }
-    const beat: Io.Timeout = .{ .duration = .{ .raw = .{ .nanoseconds = 2 * std.time.ns_per_s }, .clock = .awake } };
-    sh.changed.waitTimeout(sh.io, &sh.mutex, beat) catch {};
-    return null;
-}
-
-// How many notes the agent has not confirmed yet.
-pub fn unread(log: []const u8) usize {
-    var notes: usize = 0;
-    var acked: usize = 0;
-    var lines = std.mem.splitScalar(u8, log, '\n');
-    while (lines.next()) |line| {
-        if (std.mem.startsWith(u8, line, note_prefix)) notes += 1;
-        if (!std.mem.startsWith(u8, line, ack_prefix)) continue;
-        acked = std.fmt.parseInt(usize, line[ack_prefix.len .. line.len - 1], 10) catch acked;
-    }
-    return notes -| acked;
-}
-
-fn pending(arena: std.mem.Allocator, log: []const u8) !?[]const u8 {
-    var notes: std.ArrayList([]const u8) = .empty;
-    var acked: usize = 0;
-    var lines = std.mem.splitScalar(u8, log, '\n');
-    while (lines.next()) |line| {
-        if (std.mem.startsWith(u8, line, note_prefix)) {
-            try notes.append(arena, line[note_prefix.len .. line.len - 1]);
-        } else if (std.mem.startsWith(u8, line, ack_prefix)) {
-            acked = std.fmt.parseInt(usize, line[ack_prefix.len .. line.len - 1], 10) catch acked;
-        }
-    }
-    if (notes.items.len <= acked) return null;
-    var out: std.ArrayList(u8) = .empty;
-    try out.print(arena, "{d}\n", .{notes.items.len});
-    for (notes.items[acked..]) |note| {
-        try out.print(arena, "{s}\n", .{note});
-    }
-    return out.items;
-}
-
-test "pending returns only notes past the last ack" {
+test "keys and note ids" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const log = "{\"t\":\"open\",\"file\":\"x\"}\n" ++ note_prefix ++ "1}\n" ++ note_prefix ++ "2}\n" ++
-        ack_prefix ++ "1}\n" ++ note_prefix ++ "{\"a\":3}}\n";
-    try std.testing.expectEqualStrings("3\n2\n{\"a\":3}\n", (try pending(arena, log)).?);
-    try std.testing.expect(try pending(arena, log ++ ack_prefix ++ "3}\n") == null);
     try std.testing.expect(parseKey("../../etc/passwd!") == null);
     try std.testing.expect(parseKey("0123456789abcdef") != null);
+    var note = try std.json.parseFromSliceLeaky(std.json.Value, arena, "{\"id\":\"a-1\",\"note\":\"x\"}", .{});
+    try std.testing.expectEqualStrings(id_prefix ++ "a-1\"}\n", try takeId(arena, &note));
+    try std.testing.expect(note.object.get("id") == null);
+    var bad = try std.json.parseFromSliceLeaky(std.json.Value, arena, "{\"id\":\"a\\\"}\",\"note\":\"x\"}", .{});
+    try std.testing.expectEqualStrings("", try takeId(arena, &bad));
 }

@@ -5,6 +5,7 @@
 const std = @import("std");
 const state = @import("state.zig");
 const reviews = @import("reviews.zig");
+const delivery = @import("delivery.zig");
 const client = @import("client.zig");
 const Io = std.Io;
 
@@ -23,7 +24,7 @@ pub fn run(init: std.process.Init) void {
         const Head = struct { file: []const u8 };
         const parsed = std.json.parseFromSliceLeaky(Head, arena, head, .{ .ignore_unknown_fields = true }) catch continue;
         const status = if (reviews.endedBy(log) != null) "ended" else "open";
-        out.print(arena, "{s}  {d} unread  {s}\n", .{ status, reviews.unread(log), parsed.file }) catch return;
+        out.print(arena, "{s}  {d} unread  {s}\n", .{ status, delivery.unread(log), parsed.file }) catch return;
     }
     const daemon = if (client.running(io, d)) "running" else "stopped";
     const none = if (out.items.len == 0) "no reviews yet\n" else "";

@@ -38,12 +38,21 @@ const Job = struct {
     arena: std.mem.Allocator,
     file: []const u8,
     out: std.ArrayList(u8) = .empty,
+    // Local files the page names that could not go into the export.
+    missing: std.ArrayList(u8) = .empty,
 
-    // The bytes of one local file beside the page, or null when it is missing or outside the folder.
+    // The bytes of one local file beside the page, or null. A remote file is left as one
+    // link on purpose. A local file that is missing, too large or outside the folder is
+    // also left as one link, and its name goes into `missing`.
     fn load(job: *Job, url: []const u8) ?[]const u8 {
         if (!isLocal(url)) return null;
-        const path = (pages.confine(job.ctx.io, job.arena, job.file, url) catch return null) orelse return null;
-        return std.Io.Dir.cwd().readFileAlloc(job.ctx.io, path, job.arena, .limited(max_asset_bytes)) catch null;
+        const path = (pages.confine(job.ctx.io, job.arena, job.file, url) catch null) orelse return job.miss(url);
+        return std.Io.Dir.cwd().readFileAlloc(job.ctx.io, path, job.arena, .limited(max_asset_bytes)) catch job.miss(url);
+    }
+
+    fn miss(job: *Job, url: []const u8) ?[]const u8 {
+        job.missing.print(job.arena, "not included: {s}\n", .{url}) catch {};
+        return null;
     }
 
     // Handles the tag html[at..end]. Returns where to continue reading.
@@ -85,8 +94,14 @@ const Job = struct {
     }
 };
 
+pub const Result = struct {
+    html: []const u8,
+    // One "not included: <name>" line per local file that stayed one link.
+    missing: []const u8,
+};
+
 // Returns the standalone page for the HTML file at `file`.
-pub fn page(ctx: graphs.Ctx, arena: std.mem.Allocator, file: []const u8, source: []const u8) ![]const u8 {
+pub fn page(ctx: graphs.Ctx, arena: std.mem.Allocator, file: []const u8, source: []const u8) !Result {
     const html = (try graphs.expand(ctx, arena, source)).html;
     var job: Job = .{ .ctx = ctx, .arena = arena, .file = file };
     var i: usize = 0;
@@ -100,7 +115,7 @@ pub fn page(ctx: graphs.Ctx, arena: std.mem.Allocator, file: []const u8, source:
     if (std.mem.find(u8, job.out.items, "class=\"showme-graph\"") != null) {
         try job.out.appendSlice(arena, graph_style);
     }
-    return job.out.items;
+    return .{ .html = job.out.items, .missing = job.missing.items };
 }
 
 test "attr reads quoted values and skips look-alikes" {

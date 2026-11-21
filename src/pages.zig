@@ -138,6 +138,7 @@ pub fn events(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key:
     } });
     const out = &body.writer;
     const tab = presence.join(sh, &sh.tabs, key);
+    presence.markShown(sh, key);
     defer presence.leave(sh, &sh.tabs, tab);
     var last = Watch.now(sh, key, file, null);
     try out.print("data: presence {t}\n\n", .{last.state});
@@ -161,7 +162,7 @@ pub fn events(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key:
 pub fn download(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key: reviews.Key) !void {
     const file = try reviews.fileOf(sh, arena, key);
     const source = try Io.Dir.cwd().readFileAlloc(sh.io, file, arena, .limited(max_file_bytes));
-    const body = try exporter.page(.{ .io = sh.io, .dir = sh.dir, .env = sh.env }, arena, file, source);
+    const body = (try exporter.page(.{ .io = sh.io, .dir = sh.dir, .env = sh.env }, arena, file, source)).html;
     const name = std.fs.path.stem(file);
     const disposition = try std.fmt.allocPrint(arena, "attachment; filename=\"{s}.export.html\"", .{name});
     return respond(req, .ok, body, &.{

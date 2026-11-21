@@ -19,6 +19,21 @@ pub fn join(sh: *Shared, table: *Table, key: Key) ?usize {
     return null;
 }
 
+// Records that one tab has shown the review. Only then can "no tab" mean "the person left".
+pub fn markShown(sh: *Shared, key: Key) void {
+    sh.mutex.lockUncancelable(sh.io);
+    defer sh.mutex.unlock(sh.io);
+    sh.shown.put(std.heap.page_allocator, key, {}) catch {};
+}
+
+// True when one tab showed the review before and no tab shows it now.
+pub fn left(sh: *Shared, key: Key) bool {
+    if (count(sh, &sh.tabs, key) > 0) return false;
+    sh.mutex.lockUncancelable(sh.io);
+    defer sh.mutex.unlock(sh.io);
+    return sh.shown.contains(key);
+}
+
 pub fn leave(sh: *Shared, table: *Table, slot: ?usize) void {
     sh.mutex.lockUncancelable(sh.io);
     defer sh.mutex.unlock(sh.io);

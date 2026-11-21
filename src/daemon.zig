@@ -9,6 +9,7 @@ const presence = @import("presence.zig");
 const guard = @import("guard.zig");
 const images = @import("images.zig");
 const housekeeping = @import("housekeeping.zig");
+const delivery = @import("delivery.zig");
 const Io = std.Io;
 const net = Io.net;
 const Request = std.http.Server.Request;
@@ -127,7 +128,7 @@ fn get(c: Call, action: []const u8, key: reviews.Key) !void {
     if (is(action, "events")) return pages.events(c.sh, c.req, c.arena, key);
     if (is(action, "log")) return reply(c.req, .ok, try reviews.readLog(c.sh, c.arena, key));
     if (is(action, "export")) return pages.download(c.sh, c.req, c.arena, key);
-    if (is(action, "wait")) return wait(c.sh, c.req, c.arena, key);
+    if (is(action, "wait")) return delivery.serve(c.sh, c.req, c.arena, key);
     return reply(c.req, .not_found, "not found\n");
 }
 
@@ -155,24 +156,4 @@ fn post(c: Call, action: []const u8, key: reviews.Key) !void {
         return reply(c.req, .not_found, "not found\n");
     }
     return reply(c.req, .ok, "ok\n");
-}
-
-// Holds the agent's request open until notes exist. One space goes out every two
-// seconds: when that write fails the agent's command is gone, and the reviewer stops
-// being told that one agent listens.
-fn wait(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key: reviews.Key) !void {
-    var buf: [64]u8 = undefined;
-    var body = try req.respondStreaming(&buf, .{
-        .respond_options = .{ .keep_alive = false, .transfer_encoding = .none },
-    });
-    const slot = presence.join(sh, &sh.waiters, key);
-    defer presence.leave(sh, &sh.waiters, slot);
-    var seen_size: u64 = std.math.maxInt(u64);
-    while (true) {
-        const notes = try reviews.waitBeat(sh, arena, key, &seen_size);
-        try body.writer.writeAll(notes orelse " ");
-        try body.writer.flush();
-        try body.flush();
-        if (notes != null) return;
-    }
 }

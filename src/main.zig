@@ -17,13 +17,15 @@ const usage =
     \\usage:
     \\  show-me open <file.html> [--no-open] [--reopen]
     \\                             check the page, show it for review, return at once
-    \\  show-me wait <file.html> [--reply "text"]
+    \\  show-me wait <file.html> [--reply "text" | --reply-file <path>]
     \\                             show the reply, block until notes arrive, print them
-    \\  show-me reply <file.html> "text"   show one reply to the reviewer
+    \\  show-me reply <file.html> "text" | --file <path>
+    \\                             show one reply to the reviewer
     \\  show-me end <file.html>    end the review
     \\  show-me check <file.html>  check diagrams and writing rules, report each problem
     \\  show-me export <file.html> [--out <path>]
-    \\                             write one file that opens without show-me
+    \\                             write one file that opens without show-me, then
+    \\                             name each local file it could not include
     \\  show-me setup [folder]     write the agent skill (default ~/.claude/skills/show-me)
     \\  show-me stop               end the background daemon
     \\  show-me --version
@@ -93,9 +95,10 @@ fn exportPage(init: std.process.Init, args: []const []const u8) void {
     const custom = args.len > 4 and std.mem.eql(u8, args[3], "--out");
     const stem = path[0 .. path.len - std.fs.path.extension(path).len];
     const dest = if (custom) args[4] else std.fmt.allocPrint(arena, "{s}.export.html", .{stem}) catch return;
-    Io.Dir.cwd().writeFile(io, .{ .sub_path = dest, .data = out }) catch |e|
+    Io.Dir.cwd().writeFile(io, .{ .sub_path = dest, .data = out.html }) catch |e|
         state.fail("cannot write '{s}': {t}", .{ dest, e });
-    agent.say(io, std.fmt.allocPrint(arena, "{s}\n", .{dest}) catch return);
+    // The written path comes first, then one line per local file left out.
+    agent.say(io, std.fmt.allocPrint(arena, "{s}\n{s}", .{ dest, out.missing }) catch return);
 }
 
 fn open(init: std.process.Init, args: []const []const u8) void {

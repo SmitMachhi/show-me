@@ -20,6 +20,10 @@ const save = (name, value) => {
     try { sessionStorage.setItem("showme:" + name + ":" + key, JSON.stringify(value)); } catch (e) {}
 };
 const tell = (msg) => page.contentWindow.postMessage(Object.assign({ source: "showme-panel" }, msg), "*");
+// Each note gets one id when it is queued. A send retried after one lost answer then
+// stores nothing twice: the daemon skips ids it already has.
+const newId = () => crypto.randomUUID?.() ?? [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+const withId = (n) => Object.assign({ id: newId() }, n);
 
 let sent = [];
 let states = [];
@@ -33,7 +37,7 @@ let unseenReply = false;
 const images = createImages(key, () => render());
 const changes = createChanges(key, tell);
 const layout = createLayout(tell, (issues) => {
-    queue.push({ kind: "layout", note: "Fix these layout issues.", issues });
+    queue.push(withId({ kind: "layout", note: "Fix these layout issues.", issues }));
     render();
 });
 
@@ -65,7 +69,7 @@ function render() {
         reveal,
         url: images.url,
         remove: () => { queue.splice(i, 1); render(); },
-        save: (text) => { if (text) n.note = text; else queue.splice(i, 1); render(); },
+        save: (text) => { if (text) Object.assign(n, { note: text, id: newId() }); else queue.splice(i, 1); render(); },
     })));
     // Rows that were not there at the last render slide in. The first render does not move.
     const added = rowCount >= 0 && rows.length > rowCount;
@@ -99,7 +103,7 @@ async function loadLog() {
 async function send(andEnd) {
     const text = note.value.trim();
     const pics = images.take();
-    if (text || pics.length) queue.push(Object.assign({ kind: "message", note: text }, pics.length ? { images: pics } : {}));
+    if (text || pics.length) queue.push(withId(Object.assign({ kind: "message", note: text }, pics.length ? { images: pics } : {})));
     note.value = "";
     save("draft", "");
     try {
@@ -142,7 +146,7 @@ addEventListener("message", (e) => {
         images.upload(m.blob).then((id) => id && tell({ type: "imageDone", id, url: images.url(id) }));
     } else if (m.type === "note") {
         const { type, source, sendNow, ...n } = m;
-        queue.push(n);
+        queue.push(withId(n));
         if (sendNow) return send(false);
         render();
     }
