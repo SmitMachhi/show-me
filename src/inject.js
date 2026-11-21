@@ -2,7 +2,12 @@
 // and follows orders from the review panel: annotate mode, reveal, restore scroll.
 // The page cannot read the panel: it runs in one sandboxed frame with no origin.
 (function () {
-    const CONTROLS = "a[href],button,input,select,textarea,label,summary,[contenteditable],[data-showme-action],[data-showme-ui]";
+    // Elements that work as controls: clicks reach them and make no note. The same list
+    // as lavish, with the ARIA widget roles for controls built from plain elements.
+    const CONTROLS = "button,input,select,textarea,option,optgroup,label,summary," +
+        "[contenteditable]:not([contenteditable='false']),[data-showme-action],[data-showme-ui]," +
+        "[role=button],[role=checkbox],[role=combobox],[role=menuitem],[role=menuitemcheckbox]," +
+        "[role=menuitemradio],[role=option],[role=radio],[role=switch],[role=tab],[role=treeitem]";
     const ACCENT = "#3657d6";
     const CSS_TEXT =
         "html{scrollbar-width:thin;scrollbar-color:#8886 transparent}" +
@@ -91,9 +96,24 @@
         if (annotate && !e.target.closest(CONTROLS)) e.target.setAttribute("data-showme-hover", "");
     }, true);
 
+    // True for one link to another document. Same-page "#part" links stay in the frame.
+    function leaves(link) {
+        return !(link.getAttribute("href") || "").startsWith("#") && link.href.split("#")[0] !== location.href.split("#")[0];
+    }
+
     addEventListener("click", (e) => {
+        const link = e.target.closest("a[href]");
+        const control = e.target.closest(CONTROLS);
+        // A link never takes the review frame away. In annotate mode one plain click makes
+        // one note on it; Ctrl or Cmd click, and any click in explore mode, open one new tab.
+        if (link && leaves(link) && (!annotate || e.ctrlKey || e.metaKey || control)) {
+            e.preventDefault();
+            window.open(link.href, "_blank", "noopener");
+            return;
+        }
+        if (link && annotate) e.preventDefault();
         // The diagram view sets this flag when one drag ends, so that drag is not one pick.
-        const skip = !annotate || window.showmeDragged || e.target.closest(CONTROLS) || String(getSelection()).trim();
+        const skip = !annotate || window.showmeDragged || control || String(getSelection()).trim();
         window.showmeDragged = false;
         if (skip) return;
         e.preventDefault();
