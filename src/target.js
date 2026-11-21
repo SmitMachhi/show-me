@@ -44,9 +44,16 @@
         return anchors.find((a) => (note.node ? a.node === note.node : a.selector === note.selector));
     }
 
-    // True for one link to another document. Same-page "#part" links stay in the frame.
-    function leaves(link) {
-        return !(link.getAttribute("href") || "").startsWith("#") && link.href.split("#")[0] !== location.href.split("#")[0];
+    // The link around one element, as { url, leaves }, or null. SVG links count too:
+    // Graphviz writes one node's URL as xlink:href. `leaves` is true for one http(s) link
+    // to another document; same-page "#part" links and other schemes stay as they are.
+    function linkOf(el) {
+        const a = el.closest("a");
+        const raw = a && (a.getAttribute("href") || a.getAttribute("xlink:href"));
+        if (!raw) return null;
+        const url = new URL(raw, location.href);
+        const other = url.href.split("#")[0] !== location.href.split("#")[0];
+        return { url: url.href, leaves: /^https?:$/.test(url.protocol) && other && !raw.startsWith("#") };
     }
 
     // Marks exactly the selected words with the CSS Custom Highlight API, which adds no
@@ -61,5 +68,5 @@
         if (window.CSS && CSS.highlights) CSS.highlights.delete("showme");
     }
 
-    window.showmeTarget = { CONTROLS, cellOf, setAnchors, heldBy, leaves, markWords, clearWords };
+    window.showmeTarget = { CONTROLS, cellOf, setAnchors, heldBy, linkOf, markWords, clearWords };
 })();

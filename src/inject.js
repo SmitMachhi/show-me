@@ -89,19 +89,21 @@
     }, true);
 
     addEventListener("click", (e) => {
-        const link = e.target.closest("a[href]");
+        const link = T.linkOf(e.target);
         const control = e.target.closest(T.CONTROLS);
         // A link never takes the review frame away. In annotate mode one plain click makes
         // one note on it; Ctrl or Cmd click, and any click in explore mode, open one new tab.
-        if (link && T.leaves(link) && (!annotate || e.ctrlKey || e.metaKey || control)) {
+        if (link && link.leaves && (!annotate || e.ctrlKey || e.metaKey || control)) {
             e.preventDefault();
-            window.open(link.href, "_blank", "noopener");
+            window.open(link.url, "_blank", "noopener");
             return;
         }
         if (link && annotate) e.preventDefault();
-        // The diagram view sets this flag when one drag ends, so that drag is not one pick.
-        const skip = !annotate || window.showmeDragged || control || String(getSelection()).trim();
+        // The diagram view sets showmeDragged when one drag ends, so that drag is not one pick.
+        // textPicked: this click ends one drag-select that already opened one text card.
+        const skip = !annotate || window.showmeDragged || textPicked || control || String(getSelection()).trim();
         window.showmeDragged = false;
+        textPicked = false;
         if (skip) return;
         e.preventDefault();
         e.stopPropagation();
@@ -113,10 +115,16 @@
     addEventListener("dragover", (e) => { if (files(e)) e.preventDefault(); });
     addEventListener("drop", (e) => { if (files(e)) e.preventDefault(); });
 
+    // True from one mouseup that opened one text card until the next press. The browser
+    // sends one click after that mouseup, and the click must not open one element card.
+    let textPicked = false;
+    addEventListener("mousedown", () => { textPicked = false; }, true);
+
     addEventListener("mouseup", (e) => {
         const sel = getSelection();
         const text = String(sel).trim();
         if (!annotate || !text || e.target.closest("[data-showme-ui]")) return;
+        textPicked = true;
         // Copy the range now: the card takes focus next, and the selection may go.
         const range = sel.getRangeAt(0).cloneRange();
         const node = range.commonAncestorContainer;
