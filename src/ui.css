@@ -146,3 +146,11 @@ textarea { display: block; flex: 1; min-width: 0; padding: 6px 4px; border: 0; o
 #sketchPad nav { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; }
 #sketchPad .tool { background: #fff; color: #333; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.1), 0 2px 6px rgb(0 0 0 / 0.1); }
 #sketchPad .tool:disabled { opacity: 0.4; cursor: default; }
+/* Picture chips: dim while uploading, red ring with one retry button when it failed. */
+.thumb.uploading img { opacity: 0.45; }
+.thumb.uploading::after { content: ""; position: absolute; inset: 14px; border: 2px solid #fff; border-right-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { rotate: 360deg; } }
+.thumb.failed { box-shadow: 0 0 0 2px var(--off); }
+.thumb.failed img { opacity: 0.45; }
+.thumb .retry { position: absolute; inset: 0; margin: auto; width: 24px; height: 24px; padding: 0; border-radius: 50%; background: rgb(0 0 0 / 0.65); color: #fff; font-size: 14px; }
+.thumb.gone { display: grid; place-items: center; background: rgb(0 0 0 / 0.2); color: inherit; font-size: 10px; }

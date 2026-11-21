@@ -82,7 +82,7 @@ function render() {
     if (added) list.scrollTop = list.scrollHeight;
     el("count").textContent = queue.length || "";
     const idle = queue.length === 0 && !note.value.trim() && !images.count();
-    el("send").disabled = ended || idle;
+    el("send").disabled = ended || idle || !images.ready();
     note.disabled = ended;
     bar.setBadge(queue.length, unseenReply);
     bar.setEnded(ended);
@@ -161,7 +161,7 @@ addEventListener("message", (e) => {
     } else if (m.type === "toggleMode") {
         setMode(!bar.isAnnotate());
     } else if (m.type === "image") {
-        images.upload(m.blob).then((id) => id && tell({ type: "imageDone", id, url: images.url(id) }));
+        images.upload(m.blob).then((r) => tell(r.id ? { type: "imageDone", id: r.id, url: images.url(r.id) } : { type: "imageFailed", error: r.error }));
     } else if (m.type === "note") {
         const { type, source, sendNow, ...n } = m;
         queue.push(withId(n));

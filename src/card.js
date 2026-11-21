@@ -17,7 +17,7 @@
         "textarea{display:block;width:100%;box-sizing:border-box;padding:6px;border:0;outline:0;resize:none;" +
         "background:none;color:inherit;font:inherit}" +
         ".bar{display:flex;align-items:center;gap:6px;padding:4px 0 0 6px}" +
-        "small{flex:1;color:#6f6f6b;font-size:12px}" +
+        "small{flex:1;color:#6f6f6b;font-size:12px}small.err{color:#d64545}" +
         "button{font:inherit;border:0;border-radius:8px;padding:6px 10px;cursor:pointer;background:none;color:#6f6f6b;" +
         "transition:scale .08s cubic-bezier(.22,1,.36,1),background-color .08s}" +
         "button:hover{background:#0000000f}button:active{scale:.96}" +
@@ -35,6 +35,7 @@
     let pics = [];
     let strip = null;
     let closing = null;
+    let small = null; // the line between the attach button and Cancel
 
     function close() {
         const done = closing;
@@ -90,6 +91,7 @@
             '<button type="button" class="go" title="Add (Enter). Add and send: Ctrl+Enter">Add</button></div></div>';
         area = root.querySelector("textarea");
         strip = root.querySelector(".pics");
+        small = root.querySelector("small");
         root.querySelector(".where").textContent = target.label;
         const queue = (sendNow) => {
             const text = area.value.trim();
@@ -136,5 +138,12 @@
         return true;
     }
 
-    window.showmeCard = { open, close, busy, addImage };
+    // Shows why one picture could not be added, inside the card where it was added.
+    function fail(text) {
+        if (!small) return;
+        small.textContent = text;
+        small.className = "err";
+    }
+
+    window.showmeCard = { open, close, busy, addImage, fail };
 })();

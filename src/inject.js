@@ -153,6 +153,7 @@
         if (m.type === "reveal") reveal(m.selector);
         if (m.type === "restore") scrollTo(0, m.y);
         if (m.type === "imageDone") window.showmeCard.addImage(m.id, m.url);
+        if (m.type === "imageFailed") window.showmeCard.fail("Couldn't add the image. " + m.error);
         if (m.type === "anchors") T.setAnchors(m.items);
     });
 
