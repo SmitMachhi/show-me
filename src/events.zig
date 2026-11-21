@@ -28,8 +28,21 @@ pub fn loaded(sh: *reviews.Shared, key: reviews.Key, path: []const u8) void {
     files.n += 1;
 }
 
-// One number that changes when the page file or any file it loaded changes.
-fn pageTime(sh: *reviews.Shared, key: reviews.Key, file: []const u8) i96 {
+// The modification times of the page file and of each file it loaded, in the order the
+// files were first loaded. Files are only added at the end, so index i is one file.
+const Times = struct {
+    n: usize = 0,
+    t: [33]i96 = undefined,
+
+    // True when one file that both lists hold has one new time. One file that the page
+    // loads for the first time is not one change: its first fetch is not one edit.
+    fn changed(a: Times, b: Times) bool {
+        for (0..@min(a.n, b.n)) |i| if (a.t[i] != b.t[i]) return true;
+        return false;
+    }
+};
+
+fn pageTimes(sh: *reviews.Shared, key: reviews.Key, file: []const u8) Times {
     var paths: [33][]const u8 = undefined;
     paths[0] = file;
     var n: usize = 1;
@@ -43,17 +56,17 @@ fn pageTime(sh: *reviews.Shared, key: reviews.Key, file: []const u8) i96 {
             }
         }
     }
-    var sum: i96 = 0;
-    for (paths[0..n], 1..) |p, i| {
+    var times: Times = .{ .n = n };
+    for (paths[0..n], 0..) |p, i| {
         const stat = Io.Dir.cwd().statFile(sh.io, p, .{}) catch null;
-        sum +%= (if (stat) |s| s.mtime.nanoseconds else 0) *% @as(i96, @intCast(i));
+        times.t[i] = if (stat) |st| st.mtime.nanoseconds else 0;
     }
-    return sum;
+    return times;
 }
 
 // What one open tab is watching. A change in any field becomes one event.
 const Watch = struct {
-    page_time: i96,
+    times: Times,
     log_size: u64,
     state: presence.State,
     working: bool,
@@ -69,7 +82,7 @@ const Watch = struct {
             working = presence.deliveredUnanswered(log);
         }
         return .{
-            .page_time = pageTime(sh, key, file),
+            .times = pageTimes(sh, key, file),
             .log_size = log_size,
             .state = presence.state(sh, key, working),
             .working = working,
@@ -96,7 +109,7 @@ pub fn serve(sh: *reviews.Shared, req: *Request, arena: std.mem.Allocator, key: 
         try body.flush();
         Io.sleep(sh.io, .{ .nanoseconds = 200 * std.time.ns_per_ms }, .awake) catch return;
         const next = Watch.now(sh, key, file, last);
-        if (next.page_time != last.page_time) {
+        if (Times.changed(last.times, next.times)) {
             presence.markWorking(sh, key);
             try out.writeAll("data: reload\n\n");
         }

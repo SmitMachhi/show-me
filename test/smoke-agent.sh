@@ -101,3 +101,26 @@ kill "$t1" "$t2"; wait "$t1" "$t2" 2> /dev/null || true
 step "notes, acks and replies carry their time"
 curl -fsS "$base/log/$key" | grep -q '"t":"at","ms":[0-9]' || fail "no time lines in the log"
 head -1 "$dir/state/$key.jsonl" | grep -q '"t":"open"' || fail "the open line is not first"
+
+step "one file the page loads for the first time is not one change"
+printf 'h1 { color: red; }\n' > "$dir/extra.css"
+curl -sN "$base/events/$key" > "$dir/events.out" & t3=$!
+sleep 1
+working_before="$(curl -fsS "$base/log/$key" | grep -c '"t":"working"' || true)"
+send '{"kind":"message","note":"one more"}'
+wait_once "$dir/w9.out"
+curl -fsS "$base/a/$key/extra.css" > /dev/null
+sleep 1.5
+if grep -q "data: reload" "$dir/events.out"; then fail "fetching one new file reloaded the page"; fi
+test "$(curl -fsS "$base/log/$key" | grep -c '"t":"working"')" = "$working_before" || fail "fetching one new file wrote one working line"
+printf 'h1 { color: blue; }\n' > "$dir/extra.css"
+sleep 1.5
+test "$(grep -c "data: reload" "$dir/events.out")" = 1 || fail "one edit of one loaded file did not reload the page once"
+kill "$t3"; wait "$t3" 2> /dev/null || true
+
+step "the frame names one missing page file"
+mv "$page" "$page.gone"
+body="$(curl -s "$base/a/$key/")"
+mv "$page.gone" "$page"
+echo "$body" | grep -q "missing" || fail "no missing-file message: $body"
+echo "$body" | grep -q "plan.html" || fail "the message does not name the file"
