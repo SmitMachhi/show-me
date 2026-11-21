@@ -12,13 +12,26 @@ The agent makes HTML page. show-me opens the page in the browser. The reviewer c
 
 ## Install
 
-1. Download the file for the operating system from [Releases](https://github.com/SmitMachhi/show-me/releases).
-2. Rename the file to `show-me` (`show-me.exe` on Windows).
-3. Put the file in one folder on the PATH. On Linux and macOS, run `chmod +x show-me`.
-4. Run `show-me setup`. This command writes the agent skill to `~/.claude/skills/show-me`.
-5. Install Graphviz if the pages have diagrams. All other functions operate without Graphviz.
+Linux and macOS:
 
-To build from source, install Zig 0.17.1 and run this command:
+```sh
+curl -fsSL https://raw.githubusercontent.com/SmitMachhi/show-me/master/install.sh | sh
+```
+
+Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/SmitMachhi/show-me/master/install.ps1 | iex
+```
+
+The command does these steps:
+
+1. Downloads the program to `~/.local/bin`.
+2. Writes the agent skill to `~/.claude/skills/show-me`.
+3. Installs Graphviz with the system package manager, if Graphviz is not installed.
+4. Adds `~/.local/bin` to the PATH, if the PATH does not contain that folder.
+
+Downloads are available for Windows x86-64, Linux x86-64 and macOS on Apple silicon. For other systems, build from source: install Zig 0.17.1 and run this command:
 
 ```sh
 zig build-exe src/main.zig -O ReleaseSafe -femit-bin=show-me
@@ -82,9 +95,14 @@ If the file does not exist, no rule applies.
 
 One Zig program is the command and the background daemon. The program uses the Zig standard library and no packages. The daemon listens on 127.0.0.1 and on no other address. The daemon stops after 30 minutes without use.
 
-Measured on Windows 11: one command takes 11 ms to 14 ms, and the daemon uses 1.5 MB of memory. `bench/README.md` shows each number and the method.
+Measured on Windows 11 on 2026-11-20, median of 20 runs, with the daemon in operation:
 
-The `design` folder contains the system design as Graphviz files.
+| | show-me 0.1.1 | lavish-axi 0.1.96 |
+| --- | ---: | ---: |
+| Open one page | 13.3 ms | 858.8 ms |
+| Reply | 13.8 ms | 864.6 ms |
+| Daemon memory | 1.5 MB | 70.9 MB |
+| Text that `open` prints for the agent | 41 bytes | 3,090 bytes |
 
 ## Status
 
